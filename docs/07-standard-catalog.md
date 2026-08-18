@@ -1,3 +1,13 @@
+---
+title: "Standard Optimization Catalogue"
+status: "Stable"
+owner: "JADE Dev Team"
+last_updated: "2026-08-19"
+related_rules: ["Rule B.5","Rule B.6","Rule 47"]
+pass_type: "Architecture"
+tier: "JADE, RUBY, DIAMOND"
+---
+
 # Standard Optimization Catalogue
 
 The 12 mechanical categories that run inside `RUBY` (T2) and partially inside `JADE` (T1). The advanced optimizations in `06-optimization-catalog.md` build on top of these.

@@ -1,3 +1,13 @@
+---
+title: "Sea of Nodes IR Design"
+status: "Stable"
+owner: "JADE Dev Team"
+last_updated: "2026-08-19"
+related_rules: ["Rule B.3","Rule 51"]
+pass_type: "Architecture"
+tier: "All"
+---
+
 # Sea of Nodes IR Design
 
 The graph is the heart of .JADE. It is designed for fast traversal, mutation, cheap allocation, explicit memory/effect dependencies, and easy lowering to `asmjit`.

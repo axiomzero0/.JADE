@@ -1,3 +1,13 @@
+---
+title: "Definition of Done (Initial Milestone)"
+status: "Stable"
+owner: "JADE Dev Team"
+last_updated: "2026-08-19"
+related_rules: []
+pass_type: "Architecture"
+tier: "All"
+---
+
 # Definition of Done — Initial Milestone
 
 The project is "done" for the initial milestone when all 8 criteria below pass. Everything beyond this is relentless optimization.

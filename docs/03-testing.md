@@ -1,3 +1,13 @@
+---
+title: "Testing, Debugging, and Regression Rules"
+status: "Stable"
+owner: "JADE Dev Team"
+last_updated: "2026-08-19"
+related_rules: ["Rule 36","Rule 37","Rule 38","Rule 39","Rule 40","Rule 41","Rule 42","Rule 43"]
+pass_type: "Architecture"
+tier: "All"
+---
+
 # Testing, Debugging, and Regression Rules
 
 Compiler bugs are uniquely expensive because they corrupt trust. Users who get wrong results silently will never come back. These rules make entire categories of bugs impossible.

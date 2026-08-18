@@ -129,6 +129,17 @@ enum class NodeKind : uint8_t {
     Leave,           // leave — jump out of try, runs finally
     EndFinally,      // endfinally
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Java / JVM-specific node kinds (see docs/09-java-target.md)
+    // ─────────────────────────────────────────────────────────────────────
+
+    // ── Monitor operations (synchronized blocks) ─────────────────────────
+    MonitorEnter,    // monitorenter — acquire object monitor
+    MonitorExit,     // monitorexit  — release object monitor
+
+    // ── Invokedynamic (lambdas, string concat) ──────────────────────────
+    InvokeDynamic,   // invokedynamic — resolves through a bootstrap method
+
     kCount,         // sentinel = number of node kinds
 };
 

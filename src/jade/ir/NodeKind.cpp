@@ -154,6 +154,17 @@ constexpr NodeKindInfo kTable[] = {
     {"Rethrow",       false, true,  true,  false, false, false, 0},
     {"Leave",         false, true,  true,  false, false, false, 0},
     {"EndFinally",    false, true,  true,  false, false, false, 0},
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Java / JVM-specific node kinds (see docs/09-java-target.md)
+    // ─────────────────────────────────────────────────────────────────────
+
+    // ── Monitor operations ──
+    {"MonitorEnter",  false, true,  false, false, false, false, 1},   // obj
+    {"MonitorExit",   false, true,  false, false, false, false, 1},   // obj
+
+    // ── Invokedynamic ──
+    {"InvokeDynamic", false, true,  false, false, false, false, 0xFF}, // args...
 };
 
 static_assert(std::size(kTable) == static_cast<std::size_t>(NodeKind::kCount),

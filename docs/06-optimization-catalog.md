@@ -1,3 +1,13 @@
+---
+title: "Advanced Optimization Catalogue"
+status: "Stable"
+owner: "JADE Dev Team"
+last_updated: "2026-08-19"
+related_rules: ["Rule 36","Rule 42","Rule 47","Rule 52"]
+pass_type: "Architecture"
+tier: "RUBY, DIAMOND"
+---
+
 # Advanced Optimization Catalogue — The "PEA Suite"
 
 The highest-ROI optimizations for dynamic languages, eliminating heap allocation and GC pressure entirely.

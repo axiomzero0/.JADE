@@ -1,3 +1,13 @@
+---
+title: "Performance & Correctness Laws"
+status: "Stable"
+owner: "JADE Dev Team"
+last_updated: "2026-08-19"
+related_rules: ["A.1-A.5","B.1-B.6","C.1-C.4","Rule 36","Rule 37","Rule 38","Rule 39","Rule 40","Rule 41","Rule 42","Rule 43","Rule 44","Rule 45","Rule 46","Rule 47","Rule 48","Rule 49","Rule 50","Rule 51","Rule 52"]
+pass_type: "Architecture"
+tier: "All"
+---
+
 # Non-Bypassable Performance & Correctness Laws
 
 These are the law. Break them, and .JADE will be slow, incorrect, or unmaintainable.

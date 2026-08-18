@@ -14,6 +14,8 @@ add_executable(jade_unit_tests
     unit/test_ir_csharp_nodes.cpp
     unit/test_cil_opcode.cpp
     unit/test_cil_lowerer.cpp
+    unit/test_jvm_opcode.cpp
+    unit/test_jvm_lowerer.cpp
     unit/test_granit_value.cpp
     unit/test_tier0_granit_interpreter.cpp
     unit/test_tier0_granit_safepoint.cpp

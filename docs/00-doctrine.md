@@ -1,30 +1,72 @@
+---
+title: "The .JADE Compiler Doctrine"
+status: "Stable"
+owner: "JADE Dev Team"
+last_updated: "2026-08-19"
+related_rules: ["Rule 36", "Rule 42", "Rule 51", "Rule 52"]
+pass_type: "Architecture"
+tier: "All"
+---
+
 # The .JADE Compiler Doctrine
 
-The master philosophy document. .JADE is a 4-tier, profile-driven, speculation-heavy JIT compiler for **C#**, written in C++23. It consumes CIL (ECMA-335) bytecode — as produced by Roslyn — and lowers it to a Sea of Nodes IR for optimization. The compiler is designed for **maximum throughput** while preserving **byte-for-byte identical observable behavior** against the reference interpreter (`granit`).
-
-Every architectural decision flows from three principles:
-
-1. **Profile, then speculate.** Even in a statically-typed language like C#, virtual dispatch, generics, nullable types, and `dynamic` create runtime polymorphism. Profile data is the only reliable basis for speculation.
-2. **Every speculation needs a guard, every guard needs a reconstructible deopt state.** No exceptions.
-3. **The IR is the heart.** The Sea of Nodes graph is optimized for fast traversal, cheap mutation, and explicit memory/effect dependencies.
-
-See [`08-csharp-target.md`](08-csharp-target.md) for the C#-specific design.
+**Status:** Stable  
+**Owner:** JADE Dev Team  
+**Last Updated:** 2026-08-19  
+**Related Rules:** Rule 36 (5 regression tests), Rule 42 (Verifier), Rule 51 (Bitmasks), Rule 52 (Correctness-preserving fixes)
 
 ---
 
+## Mission
+
+`.JADE` is a 4-tier, profile-driven, speculation-heavy JIT compiler written in C++23. It targets **both C# (CIL bytecode, ECMA-335) and Java (JVM bytecode, JVMS §6.5)** with a unified Sea-of-Nodes IR. The compiler is designed for **maximum throughput** while preserving **byte-for-byte identical observable behavior** against the reference interpreter (`granit`) on every supported source language.
+
+Every architectural decision flows from three principles:
+
+1. **Profile, then speculate.** Even in statically-typed languages like C# and Java, virtual dispatch, generics (reified in CLR, erased in JVM), nullable types, and `dynamic` create runtime polymorphism. Profile data is the only reliable basis for speculation.
+2. **Every speculation needs a guard, every guard needs a reconstructible deopt state.** No exceptions.
+3. **The IR is the heart.** The Sea of Nodes graph is optimized for fast traversal, cheap mutation, and explicit memory/effect dependencies. The IR is target-agnostic; CIL and JVM opcodes lower to the same node kinds.
+
+See [`08-csharp-target.md`](08-csharp-target.md) for the C#-specific design and [`09-java-target.md`](09-java-target.md) for the Java-specific design.
+
 ## Table of Contents
 
+### Doctrine & Philosophy
 | Doc | Title | Purpose |
 | :-- | :-- | :-- |
 | `00-doctrine.md` | The .JADE Compiler Doctrine | This overview. The 4-tier pipeline summary. |
 | `01-laws.md` | Performance & Correctness Laws | Non-bypassable rules (A.1–A.5, B.1–B.6, C.1–C.4, Rules 36–52). |
 | `02-son-ir.md` | Sea of Nodes IR Design | Graph layout, node shape, edge pools, effect chains. |
-| `03-testing.md` | Testing, Debugging, Regression | Rule 36–52 enforcement in CI. |
+
+### Architecture & Verification
+| Doc | Title | Purpose |
+| :-- | :-- | :-- |
+| `ARCHITECTURE.md` | High-Level Architecture | Memory model, threading, IR design, pipeline overview. |
+| `DEOPT_PROTOCOL.md` | Deoptimization Protocol | FrameState layout, reconstruction logic, guard types, A.4 correctness proof. |
+| `BYTECODE_SPEC.md` | CIL/JVM Bytecode Specification | Full opcode coverage for both C# (ECMA-335) and Java (JVMS §6.5); unified type lattice. |
 | `04-cpp23.md` | C++23 Usage Rules | What is allowed vs. forbidden in hot paths. |
-| `05-milestone.md` | Definition of Done (Initial) | The 8 acceptance criteria. |
+
+### Passes & Optimization
+| Doc | Title | Purpose |
+| :-- | :-- | :-- |
+| `PASS_LIST.md` | Pass Catalogue | Every optimization pass, dependencies, idempotency proof, monotonicity proof. |
+| `passes/pea_specification.md` | Partial Escape Analysis (PEA) | Per-pass spec following the mandatory template. |
 | `06-optimization-catalog.md` | Advanced Optimization Catalogue | PEA, SRA, GVN, GCM, LICM, SLP, vectorization, devirtualization. |
-| `07-standard-catalog.md` | Standard Optimization Catalogue | 12 categories of mechanical optimizations (constant folding, DCE, CFG simplification, etc.). |
-| `08-csharp-target.md` | **C# / CIL Target Specification** | CIL bytecode, CLR type system, value vs reference types, exception handling, per-tier C# specializations. |
+| `07-standard-catalog.md` | Standard Optimization Catalogue | 12 categories of mechanical optimizations. |
+
+### Testing & Performance
+| Doc | Title | Purpose |
+| :-- | :-- | :-- |
+| `TESTING_DOCTRINE.md` | Testing Doctrine | Rule 36 enforcement, Rule 37 golden tests, Rule 38 differential testing, Rule 42 verifier invariants. |
+| `03-testing.md` | Testing, Debugging, Regression | Original CI layout (kept for back-compat). |
+| `BENCHMARK_RECORD.md` | Benchmark Record | Gold-standard history of perf results per commit. |
+| `05-milestone.md` | Definition of Done (Initial) | The 8 acceptance criteria. |
+
+### Target Language Specs
+| Doc | Title | Purpose |
+| :-- | :-- | :-- |
+| `08-csharp-target.md` | C# / CIL Target Specification | ECMA-335 CIL, CLR type system, value vs reference types, per-tier C# specializations. |
+| `09-java-target.md` | Java / JVM Target Specification | JVMS bytecode, JVM type system, erased generics, monitorenter/exit, per-tier Java specializations. |
 
 ---
 

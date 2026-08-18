@@ -1,3 +1,13 @@
+---
+title: "C# / CIL Target Specification"
+status: "Stable"
+owner: "JADE Dev Team"
+last_updated: "2026-08-19"
+related_rules: ["Rule A.4","Rule 42","Rule 51","Rule 52"]
+pass_type: "Architecture"
+tier: "All"
+---
+
 # .JADE — C# Compilation Target
 
 This document specifies how `.JADE` applies to **C#** as its source language. The doctrine's tiered, profile-driven, speculation-heavy design still holds — but the bytecode, type system, and value model now reflect the CLR / ECMA-335 CIL specification.
