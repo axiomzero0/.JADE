@@ -37,6 +37,8 @@ See [`08-csharp-target.md`](08-csharp-target.md) for the C#-specific design and 
 | `00-doctrine.md` | The .JADE Compiler Doctrine | This overview. The 4-tier pipeline summary. |
 | `01-laws.md` | Performance & Correctness Laws | Non-bypassable rules (A.1–A.5, B.1–B.6, C.1–C.4, Rules 36–52). |
 | `02-son-ir.md` | Sea of Nodes IR Design | Graph layout, node shape, edge pools, effect chains. |
+| `NO_STUBS_POLICY.md` | No Stubs / No Placeholders Policy | No TODOs in critical paths; fallback tier instead. |
+| `STRICT_ERROR_HANDLING.md` | Strict Error Handling Policy | Result<T> everywhere; fail-fast fail-safe. |
 
 ### Architecture & Verification
 | Doc | Title | Purpose |

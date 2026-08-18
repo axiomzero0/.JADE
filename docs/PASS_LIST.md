@@ -36,30 +36,31 @@ A pass that is not listed here **does not exist** for the purposes of the pipeli
 | 1 | `ConstantFolding` | JADE, RUBY | `ir/passes/ConstantFolding.cpp` | `passes/constant_folding.md` | ✅ Implemented |
 | 2 | `GVN` (Global Value Numbering) | RUBY | `ir/passes/GVN.cpp` | `passes/gvn.md` | ✅ Implemented |
 | 3 | `DCE` (Dead Code Elimination) | JADE, RUBY | `ir/passes/DeadCodeElimination.cpp` | `passes/dce.md` | ✅ Implemented |
-| 4 | `CSE` (Common Subexpression Elimination) | RUBY | (planned) | `passes/cse.md` | 🚧 Stub |
-| 5 | `SCCP` (Sparse Conditional Constant Propagation) | RUBY | (planned) | `passes/sccp.md` | 🚧 Stub |
-| 6 | `AlgebraicSimplification` | RUBY | (planned) | `passes/algebraic.md` | 🚧 Stub |
-| 7 | `ControlFlowSimplification` | RUBY | (planned) | `passes/cfg_simplify.md` | 🚧 Stub |
-| 8 | `LICM` (Loop Invariant Code Motion) | RUBY | (planned) | `passes/licm.md` | 🚧 Stub |
-| 9 | `GCM` (Global Code Motion) | RUBY | (planned) | `passes/gcm.md` | 🚧 Stub |
-| 10 | `BCE` (Bounds Check Elimination) | RUBY | (planned) | `passes/bce.md` | 🚧 Stub |
-| 11 | `NCE` (Null Check Elimination) | RUBY | (planned) | `passes/nce.md` | 🚧 Stub |
-| 12 | `EscapeAnalysis` (basic) | RUBY | (planned) | `passes/escape_analysis.md` | 🚧 Stub |
-| 13 | `PEA` (Partial Escape Analysis) | DIAMOND | (planned) | `passes/pea_specification.md` | 🚧 Stub |
-| 14 | `SRA` (Scalar Replacement of Aggregates) | DIAMOND | (planned) | `passes/sra.md` | 🚧 Stub |
-| 15 | `SLP` (Superword Level Parallelism) | DIAMOND | (planned) | `passes/slp.md` | 🚧 Stub |
-| 16 | `LoopVectorization` (guarded) | DIAMOND | (planned) | `passes/loop_vec.md` | 🚧 Stub |
-| 17 | `LoopUnrolling` | DIAMOND | (planned) | `passes/loop_unroll.md` | 🚧 Stub |
-| 18 | `LoopPeeling` | RUBY | (planned) | `passes/loop_peel.md` | 🚧 Stub |
-| 19 | `LoopUnswitching` | DIAMOND | (planned) | `passes/loop_unswitch.md` | 🚧 Stub |
-| 20 | `Inlining` (with cost model) | RUBY, DIAMOND | (planned) | `passes/inlining.md` | 🚧 Stub |
-| 21 | `TailCallElimination` | RUBY | (planned) | `passes/tce.md` | 🚧 Stub |
-| 22 | `Devirtualization` (CHA + profile) | DIAMOND | (planned) | `passes/devirt.md` | 🚧 Stub |
-| 23 | `TypeNarrowing` | RUBY | (planned) | `passes/type_narrow.md` | 🚧 Stub |
-| 24 | `ICStubEmission` | JADE | (planned) | `passes/ic_stubs.md` | 🚧 Stub |
-| 25 | `ProfileGuidedBlockReorder` | RUBY, DIAMOND | (planned) | `passes/block_reorder.md` | 🚧 Stub |
-| 26 | `LinearScanRegAlloc` | JADE, RUBY | (planned) | `passes/lsra.md` | 🚧 Stub |
-| 27 | `Peephole` (post-regalloc) | JADE, RUBY, DIAMOND | (planned) | `passes/peephole.md` | 🚧 Stub |
+| 4 | `LinearScanRegAlloc` | JADE, RUBY | `tier1_jade/LinearScanRegAlloc.cpp` | `passes/lsra.md` | ✅ Implemented |
+| 5 | `CodeEmission` (asmjit) | JADE | `tier1_jade/CodeEmitter.cpp` | `passes/code_emission.md` | ✅ Implemented (subset of NodeKinds) |
+| 6 | `CSE` (Common Subexpression Elimination) | RUBY | (planned) | `passes/cse.md` | 🚧 Stub |
+| 7 | `SCCP` (Sparse Conditional Constant Propagation) | RUBY | (planned) | `passes/sccp.md` | 🚧 Stub |
+| 8 | `AlgebraicSimplification` | RUBY | (planned) | `passes/algebraic.md` | 🚧 Stub |
+| 9 | `ControlFlowSimplification` | RUBY | (planned) | `passes/cfg_simplify.md` | 🚧 Stub |
+| 10 | `LICM` (Loop Invariant Code Motion) | RUBY | (planned) | `passes/licm.md` | 🚧 Stub |
+| 11 | `GCM` (Global Code Motion) | RUBY | (planned) | `passes/gcm.md` | 🚧 Stub |
+| 12 | `BCE` (Bounds Check Elimination) | RUBY | (planned) | `passes/bce.md` | 🚧 Stub |
+| 13 | `NCE` (Null Check Elimination) | RUBY | (planned) | `passes/nce.md` | 🚧 Stub |
+| 14 | `EscapeAnalysis` (basic) | RUBY | (planned) | `passes/escape_analysis.md` | 🚧 Stub |
+| 15 | `PEA` (Partial Escape Analysis) | DIAMOND | (planned) | `passes/pea_specification.md` | 🚧 Stub |
+| 16 | `SRA` (Scalar Replacement of Aggregates) | DIAMOND | (planned) | `passes/sra.md` | 🚧 Stub |
+| 17 | `SLP` (Superword Level Parallelism) | DIAMOND | (planned) | `passes/slp.md` | 🚧 Stub |
+| 18 | `LoopVectorization` (guarded) | DIAMOND | (planned) | `passes/loop_vec.md` | 🚧 Stub |
+| 19 | `LoopUnrolling` | DIAMOND | (planned) | `passes/loop_unroll.md` | 🚧 Stub |
+| 20 | `LoopPeeling` | RUBY | (planned) | `passes/loop_peel.md` | 🚧 Stub |
+| 21 | `LoopUnswitching` | DIAMOND | (planned) | `passes/loop_unswitch.md` | 🚧 Stub |
+| 22 | `Inlining` (with cost model) | RUBY, DIAMOND | (planned) | `passes/inlining.md` | 🚧 Stub |
+| 23 | `TailCallElimination` | RUBY | (planned) | `passes/tce.md` | 🚧 Stub |
+| 24 | `Devirtualization` (CHA + profile) | DIAMOND | (planned) | `passes/devirt.md` | 🚧 Stub |
+| 25 | `TypeNarrowing` | RUBY | (planned) | `passes/type_narrow.md` | 🚧 Stub |
+| 26 | `ICStubEmission` | JADE | (planned) | `passes/ic_stubs.md` | 🚧 Stub |
+| 27 | `ProfileGuidedBlockReorder` | RUBY, DIAMOND | (planned) | `passes/block_reorder.md` | 🚧 Stub |
+| 28 | `Peephole` (post-regalloc) | JADE, RUBY, DIAMOND | (planned) | `passes/peephole.md` | 🚧 Stub |
 
 ---
 

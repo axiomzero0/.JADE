@@ -1,0 +1,4 @@
+# asmjit is cloned at setup time. We don't track its source files in our repo.
+# To set up:
+#   git clone https://github.com/asmjit/asmjit.git third_party/asmjit
+asmjit/

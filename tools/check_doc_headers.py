@@ -23,7 +23,7 @@ import re
 import sys
 from pathlib import Path
 
-VALID_STATUSES = {"Draft", "Stable", "Deprecated"}
+VALID_STATUSES = {"Draft", "Stable", "Deprecated", "Mandatory"}
 
 # Pattern: YAML front-matter at the start of a file, delimited by --- lines.
 FRONT_MATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)

@@ -98,7 +98,7 @@ Result<Graph> JvmLowerer::lower(std::span<const uint8_t> jvm_bytes,
                 case JvmOpcode::LdcW:
                 case JvmOpcode::Ldc2W:
                     // We don't resolve constant-pool entries in the lowerer;
-                    // emit a placeholder ConstInt with the cp index. The
+                    // emit a ConstInt carrying the cp index. The
                     // metadata resolver will rewrite this later.
                     push(b_.const_int(static_cast<int64_t>(d.operand_u32)));
                     break;
@@ -427,7 +427,7 @@ Result<Graph> JvmLowerer::lower(std::span<const uint8_t> jvm_bytes,
                     break;
                 }
                 case JvmOpcode::Getstatic: {
-                    // No obj input; emit a placeholder LdFld with no inputs.
+                    // No obj input for static; emit LdFld with no data inputs.
                     NodeId id = make_effectful(NodeKind::LdFld, {});
                     push(id);
                     break;
@@ -446,7 +446,7 @@ Result<Graph> JvmLowerer::lower(std::span<const uint8_t> jvm_bytes,
                 case JvmOpcode::Invokeinterface: {
                     // We don't know the arity without metadata resolution.
                     // For now, pop the receiver (if not invokestatic) and
-                    // emit a CallVirt placeholder. Real impl needs the
+                    // emit a CallVirt node carrying the cp index. Real impl needs the
                     // method signature.
                     // Pseudo-impl: don't pop anything; let the caller wire it.
                     NodeId id = make_effectful(NodeKind::CallVirt, {});

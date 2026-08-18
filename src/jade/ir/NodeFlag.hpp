@@ -26,7 +26,7 @@ enum class NodeFlag : uint16_t {
     IsDead       = 1u << 9,   // marked dead by DCE; no live user may reference it
     IsScheduled  = 1u << 10,  // already placed into a block by GCM
     HasSideExit  = 1u << 11,  // can deopt (any guard)
-    IsCold       = 1u << 12,  // unreachable in hot path (cold path / deopt stub)
+    IsCold       = 1u << 12,  // unreachable in hot path (cold path / deopt target)
     IsLoop       = 1u << 13,  // is a Loop header node
     HasTypeNarrowing = 1u << 14,  // has been type-narrowed by CheckXxx
 };

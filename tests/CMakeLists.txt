@@ -20,6 +20,7 @@ add_executable(jade_unit_tests
     unit/test_tier0_granit_interpreter.cpp
     unit/test_tier0_granit_safepoint.cpp
     unit/test_runtime_epoch.cpp
+    unit/test_tier1_jade.cpp
 )
 
 jade_target_apply_tooling_flags(jade_unit_tests)
@@ -29,6 +30,12 @@ target_link_libraries(jade_unit_tests PRIVATE
     jade_granit
     GTest::gtest_main
 )
+
+# Tier 1 tests need jade_tier1 (which pulls in asmjit).
+if(TARGET jade_tier1)
+    target_link_libraries(jade_unit_tests PRIVATE jade_tier1)
+    target_compile_definitions(jade_unit_tests PRIVATE JADE_HAVE_ASMJIT=1)
+endif()
 
 gtest_discover_tests(jade_unit_tests)
 

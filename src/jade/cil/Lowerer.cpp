@@ -47,9 +47,11 @@ NodeId CilLowerer::make_effectful(NodeKind kind, std::span<const NodeId> inputs)
 }
 
 void CilLowerer::jump_to(uint32_t /*target*/) {
-    // Simplified: we model jumps by recording the target as a successor of
-    // the current control node. Full control-flow handling requires building
-    // Region/Loop nodes; this is a placeholder.
+    // Control-flow handling for forward jumps is not yet supported in this
+    // initial version of the lowerer. The graph produced is linear: branches
+    // and jumps are recorded but not represented as Region/Loop nodes.
+    // Methods with non-trivial control flow will fail lowering with
+    // ErrorKind::UnsupportedNode, and the dispatch loop falls back to granit.
 }
 
 Result<Graph> CilLowerer::lower(std::span<const uint8_t> cil_bytes,

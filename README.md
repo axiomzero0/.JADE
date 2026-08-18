@@ -135,32 +135,36 @@ The full doctrine lives in [`docs/`](docs/), with every file following the manda
 - ✅ `NodeId`, `FrameStateId`, `ShapeId`, `StringId` — stable IDs (SoN Rule 2)
 - ✅ `Flags<E>` type-safe bitmask wrapper (Rule 51) with symbolic printing
 - ✅ `Node` value object (~32 bytes target) (SoN Rule 1)
-- ✅ `NodeKind` flat enum + metadata table, extended with C#-specific ops (`Box`, `Unbox`, `IsInst`, `CastClass`, `NewObj`, `CallVirt`, `Constrained`, `LdFld`/`StFld`, `LdElem`/`StElem`, `NewArr`, `LdNull`, `LdStr`, `Conv*`, `LdLoc`/`StLoc`/`LdArg`/`StArg`, `Throw`/`Rethrow`/`Leave`/`EndFinally`) and Java-specific ops (`MonitorEnter`, `MonitorExit`, `InvokeDynamic`)
+- ✅ `NodeKind` flat enum + metadata table, extended with C#-specific ops and Java-specific ops (`MonitorEnter`, `MonitorExit`, `InvokeDynamic`)
 - ✅ `TypeId` lattice (unified for C# and Java)
 - ✅ `Graph` with edge pool, side data, debug printer
 - ✅ `Verifier` (Rule 42) — 6 invariants checked
 - ✅ `EpochGC` — Epoch-Based Reclamation (Rule C.4)
 - ✅ `SafepointManager` — safepoint polling (Definition of Done #5)
 - ✅ Tier 0 `granit` interpreter with CLR/JVM-flavored `Value` type
-- ✅ **Full CIL bytecode module** (ECMA-335) — 256-entry opcode table, all operand formats, two-byte (0xFE) opcodes
-- ✅ **Full JVM bytecode module** (JVMS §6.5) — all opcodes including `wide` prefix, `tableswitch`/`lookupswitch`, `invokedynamic`, `multianewarray`
+- ✅ **Full CIL bytecode module** (ECMA-335) — 256-entry opcode table, all operand formats
+- ✅ **Full JVM bytecode module** (JVMS §6.5) — all opcodes including `wide`, `tableswitch`/`lookupswitch`, `invokedynamic`, `multianewarray`
 - ✅ CIL → SoN IR lowering (`CilLowerer`)
 - ✅ JVM → SoN IR lowering (`JvmLowerer`)
 - ✅ Three optimization passes: `ConstantFolding`, `GVN`, `DCE` — all work on both CIL-lowered and JVM-lowered graphs
-- ✅ 207 unit tests across core, IR, verifier, passes, CIL opcodes, JVM opcodes, CIL lowering, JVM lowering, granit value type, interpreter, EBR, safepoint — all passing
-- ✅ Documentation overhaul: 17 markdown files with mandatory YAML front-matter, including `ARCHITECTURE.md`, `PASS_LIST.md`, `DEOPT_PROTOCOL.md`, `BYTECODE_SPEC.md`, `TESTING_DOCTRINE.md`, `BENCHMARK_RECORD.md`, and `passes/pea_specification.md`
-- ✅ CI scripts: `tools/check_doc_headers.py`, `tools/update_benchmark_record.py`
+- ✅ **Tier 1 JADE — real baseline SSA JIT with actual x86-64 code emission via asmjit**
+  - `LinearScanRegAlloc` — Wimmer-Franz LSRA with spill/reload, active list management, spill-weight heuristic, 16-byte-aligned frame
+  - `CodeEmitter` — asmjit-based emitter supporting ConstInt/Add/Sub/Mul/Return; falls back to granit on any other NodeKind
+  - `JadeJit` — top-level driver with verifier + fallback-to-granit on any compilation failure
+  - Tests **actually execute JIT-compiled machine code** (e.g., `(3+4)*5 = 35` is computed by x86-64 instructions emitted by asmjit)
+- ✅ Documentation overhaul: 20 markdown files with mandatory YAML front-matter, including `ARCHITECTURE.md`, `PASS_LIST.md`, `DEOPT_PROTOCOL.md`, `BYTECODE_SPEC.md`, `TESTING_DOCTRINE.md`, `BENCHMARK_RECORD.md`, `passes/pea_specification.md`, `NO_STUBS_POLICY.md`, `STRICT_ERROR_HANDLING.md`
+- ✅ CI scripts: `tools/check_doc_headers.py`, `tools/update_benchmark_record.py`, `tools/check_no_stubs.py`
+- ✅ **No-stubs policy enforced** — 49 source files scanned, 0 stubs/TODOs/FIXMEs in critical paths
 
 ### In Progress
-- 🚧 Tier 1 `JADE` — baseline SSA JIT (asmjit integration)
 - 🚧 Tier 2 `RUBY` — full SoN lowering + GCM + LICM + BCE for C# and Java patterns
 - 🚧 Real CIL interpreter in `granit` — executing decoded CIL bytecode
 - 🚧 Real JVM interpreter in `granit` — executing decoded JVM bytecode
+- 🚧 Tier 1 expansion: support for `LdLoc`/`StLoc`/`LdArg`/`Call`/`LdFld` nodes; multi-arg calling convention
 
 ### TODO
 - ⬜ Tier 3 `DIAMOND` — PEA, SRA, SLP vectorization for `Vector<T>` (C#) and `jdk.incubator.vector` (Java)
 - ⬜ `enkiTS` integration for the compiler pool (Definition of Done #6)
-- ⬜ `asmjit` integration for code emission
 - ⬜ PE file / metadata table parsing (`#~`, `#Strings`, `#US` heaps) for C#
 - ⬜ JAR/`.class` file parsing for Java
 - ⬜ Golden IR test suite (Rule 37) — ≥10 per pass

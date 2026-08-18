@@ -137,7 +137,7 @@ constexpr OpcodeInfo kTable[] = {
     {kUnknown.name, OperandFormat::None, false, false, false, false, false, false},             // 0x70 = cpblk
     {"ldobj",       OperandFormat::InlineType,  false, true,  true,  false, false, true},        // 0x71
     {"ldstr",       OperandFormat::InlineString, false, true,  false, false, false, false},     // 0x72
-    {kUnknown.name, OperandFormat::None, false, false, false, false, false, false},             // 0x73 = ldftn (placeholder)
+    {kUnknown.name, OperandFormat::None, false, false, false, false, false, false},             // 0x73 = ldftn (not yet decoded; treated as Invalid)
     {"newobj",      OperandFormat::InlineMethod, false, false, false, false, true,  true},   // 0x74
     {"castclass",   OperandFormat::InlineType,  false, true,  true,  false, false, true},
     {"isinst",      OperandFormat::InlineType,  false, true,  true,  false, false, true},

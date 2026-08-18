@@ -24,9 +24,9 @@ namespace {
 void print_version() {
     std::println("jadec (.JADE Compiler) version 0.1.0");
     std::println("  Tier 0 (granit)  : enabled");
-    std::println("  Tier 1 (JADE)    : stub");
+    std::println("  Tier 1 (JADE)    : enabled (LinearScanRegAlloc + asmjit emitter)");
     std::println("  Tier 2 (RUBY)    : enabled (passes: ConstantFolding, GVN, DCE)");
-    std::println("  Tier 3 (DIAMOND) : stub");
+    std::println("  Tier 3 (DIAMOND) : not yet enabled (falls back to RUBY)");
 }
 
 void print_help(const char* prog) {
