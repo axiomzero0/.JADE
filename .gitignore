@@ -67,3 +67,5 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+build/
+cmake-3.31.4-linux-x86_64/
