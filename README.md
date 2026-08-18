@@ -1,19 +1,19 @@
 # .JADE
 
-A 4-tier, profile-driven, speculation-heavy JIT compiler for a dynamic language, written in C++23.
+A 4-tier, profile-driven, speculation-heavy JIT compiler for **C#**, written in C++23.
 
-> **Status:** Early development. The initial milestone (see `docs/05-milestone.md`) is the goal of the current sprint.
+> **Status:** Early development. The initial milestone (see `docs/05-milestone.md`) is the goal of the current sprint. The compiler consumes CIL (ECMA-335) bytecode — as produced by Roslyn — and lowers it to a Sea of Nodes IR for optimization.
 
 ## The 4-Tier Pipeline
 
-| Tier | Name | Role |
+| Tier | Name | Role in a C# context |
 | :-- | :-- | :-- |
-| T0 | `granit`  | Register-style interpreter — zero compilation latency, profile collection |
-| T1 | `JADE`   | Baseline SSA JIT — eliminate dispatch overhead in milliseconds |
-| T2 | `RUBY`   | Sea of Nodes optimizing JIT — GVN, escape analysis, LICM, GCM, OSR |
-| T3 | `DIAMOND`| Peak AOT/JIT hybrid — PEA, SRA, SLP, vectorization, devirtualization |
+| T0 | `granit`  | CIL interpreter. Reads `.dll`/`.exe` PE files, parses metadata, executes CIL opcodes on a typed evaluation stack. Collects type feedback. Polls safepoints at back-edges. |
+| T1 | `JADE`   | Baseline SSA JIT. Lowers CIL to flat SSA. Fast Linear-Scan register allocation. Monomorphic IC stubs for `callvirt`. |
+| T2 | `RUBY`   | Sea of Nodes optimizing JIT. Full SoN IR with explicit effect chains. GVN, escape analysis, LICM, BCE, GCM, OSR. Scalar-replaces value types. |
+| T3 | `DIAMOND`| Peak AOT/JIT hybrid. Partial Escape Analysis for boxed value types. SLP auto-vectorization for `Vector<T>`. Speculative devirtualization with CHA. WPD in AOT mode. |
 
-See [`docs/00-doctrine.md`](docs/00-doctrine.md) for the full doctrine.
+See [`docs/00-doctrine.md`](docs/00-doctrine.md) for the full doctrine and [`docs/08-csharp-target.md`](docs/08-csharp-target.md) for the C#-specific design.
 
 ## Build
 
@@ -46,6 +46,7 @@ The full doctrine lives in [`docs/`](docs/):
 - [`05-milestone.md`](docs/05-milestone.md) — Definition of Done (initial)
 - [`06-optimization-catalog.md`](docs/06-optimization-catalog.md) — Advanced optimizations
 - [`07-standard-catalog.md`](docs/07-standard-catalog.md) — Standard optimization catalogue
+- [`08-csharp-target.md`](docs/08-csharp-target.md) — **C# / CIL target specification**
 
 ## Project Layout
 
@@ -58,16 +59,15 @@ The full doctrine lives in [`docs/`](docs/):
 │   ├── core/               # Arena, Result, NodeId, Flags (Rule 51)
 │   ├── ir/                 # Node, Graph, Verifier (Rule 42), Passes
 │   │   └── passes/         # ConstantFolding, DCE, GVN, Pipeline
+│   ├── cil/                # CIL bytecode (Opcode.hpp), CIL→SoN Lowerer
 │   ├── runtime/            # Safepoint, Epoch GC (Rule C.4)
-│   ├── tier0_granit/       # Bytecode, Interpreter
+│   ├── tier0_granit/       # Bytecode, Value (CLR type system), Interpreter
 │   ├── tier1_jade/         # Baseline SSA JIT (stub)
 │   ├── tier2_ruby/         # Sea of Nodes JIT (stub)
-│   ├── tier3_diamond/      # Peak optimizer (stub)
+│   ├── tier3_diamond/     # Peak optimizer (stub)
 │   └── driver/             # CLI driver
 ├── tests/
-│   ├── unit/               # Unit tests (GoogleTest)
-│   ├── golden/             # Golden IR tests (Rule 37) — TODO
-│   └── differential/        # Differential tests (Rule 38) — TODO
+│   └── unit/               # 162 unit tests (GoogleTest)
 └── third_party/            # asmjit, enkiTS — TODO
 ```
 
@@ -80,29 +80,32 @@ The full doctrine lives in [`docs/`](docs/):
 - ✅ `NodeId`, `FrameStateId`, `ShapeId`, `StringId` — stable IDs (SoN Rule 2)
 - ✅ `Flags<E>` type-safe bitmask wrapper (Rule 51) with symbolic printing
 - ✅ `Node` value object (~32 bytes target) (SoN Rule 1)
-- ✅ `NodeKind` flat enum + metadata table (SoN Rule 1, B.3)
+- ✅ `NodeKind` flat enum + metadata table, **extended with C#-specific ops**: `Box`, `Unbox`, `IsInst`, `CastClass`, `NewObj`, `CallVirt`, `Constrained`, `LdFld`/`StFld`, `LdElem`/`StElem`, `NewArr`, `LdNull`, `LdStr`, `Conv*`, `LdLoc`/`StLoc`/`LdArg`/`StArg`, `Throw`/`Rethrow`/`Leave`/`EndFinally`
 - ✅ `TypeId` lattice (for SCCP, type narrowing)
 - ✅ `Graph` with edge pool, side data, debug printer
 - ✅ `Verifier` (Rule 42) — 6 invariants checked
 - ✅ `EpochGC` — Epoch-Based Reclamation (Rule C.4)
 - ✅ `SafepointManager` — safepoint polling (Definition of Done #5)
-- ✅ Tier 0 `granit` bytecode + interpreter (Definition of Done #1)
-- ✅ Three optimization passes: `ConstantFolding`, `GVN`, `DCE`
-- ✅ Pass pipeline (Rule B.5 — idempotent; Rule B.6 — monotonic)
-- ✅ Unit tests: 60+ tests across core, IR, verifier, passes, interpreter, EBR, safepoint
+- ✅ Tier 0 `granit` interpreter with CLR-flavored `Value` type (int32/int64/float/object-ref/managed-ptr/native-ptr)
+- ✅ **CIL bytecode module** (ECMA-335 subset) — full opcode decoder with operand format table
+- ✅ **CIL → SoN IR lowering** (`CilLowerer`) — handles ldc.i4/ldloc/stloc/ldarg/add/sub/mul/div/ceq/box/unbox/castclass/isinst/conv/ret
+- ✅ Three optimization passes: `ConstantFolding`, `GVN`, `DCE` — all work on CIL-lowered graphs
+- ✅ 162 unit tests across core, IR, verifier, passes, CIL opcodes, CIL lowering, C# IR nodes, granit value type, interpreter, EBR, safepoint — all passing
 
 ### In Progress
 - 🚧 Tier 1 `JADE` — baseline SSA JIT (asmjit integration)
-- 🚧 Tier 2 `RUBY` — full Sea of Nodes lowering + GCM + LICM + BCE
+- 🚧 Tier 2 `RUBY` — full SoN lowering + GCM + LICM + BCE for C# patterns
+- 🚧 CIL interpreter (granit executing real CIL bytecode, not just the legacy Op enum)
 
 ### TODO
-- ⬜ Tier 3 `DIAMOND` — PEA, SRA, SLP, vectorization
+- ⬜ Tier 3 `DIAMOND` — PEA, SRA, SLP vectorization for C# (`Vector<T>`, `Span<T>`)
 - ⬜ `enkiTS` integration for the compiler pool (Definition of Done #6)
 - ⬜ `asmjit` integration for code emission
+- ⬜ PE file / metadata table parsing (`#~`, `#Strings`, `#US` heaps)
 - ⬜ Golden IR test suite (Rule 37) — ≥10 per pass
-- ⬜ Differential testing harness (Rule 38)
-- ⬜ `.jade` source parser — currently only runs the built-in demo program
+- ⬜ Differential testing against CoreCLR (Rule 38)
 
 ## License
 
 See [`LICENSE`](LICENSE).
+

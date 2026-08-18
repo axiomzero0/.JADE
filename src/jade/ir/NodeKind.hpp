@@ -30,7 +30,7 @@ enum class NodeKind : uint8_t {
     Switch,         // multi-way branch
     Jump,           // unconditional goto
     Return,         // returns a value, exits function
-    Throw,          // throws an exception
+    // Note: Throw is declared below in the exception-handling section.
 
     // ── Constants ────────────────────────────────────────────────────────
     ConstInt,       // 64-bit signed integer
@@ -79,6 +79,55 @@ enum class NodeKind : uint8_t {
     Safepoint,      // safepoint poll location
     Deopt,          // deoptimization trigger (cold path)
     Unreachable,    // unreachable after this point
+
+    // ─────────────────────────────────────────────────────────────────────
+    // C# / CIL-specific node kinds (see docs/08-csharp-target.md)
+    // ─────────────────────────────────────────────────────────────────────
+
+    // ── Boxing and type conversions ──────────────────────────────────────
+    Box,            // box a value type into a heap object
+    Unbox,          // unbox to a managed pointer to the value-type storage
+    UnboxAny,       // unbox and copy the value out
+    IsInst,         // C# `is` — null on mismatch, no throw
+    CastClass,      // C# `(T)x` — throws InvalidCastException on mismatch
+    LdNull,         // push null reference
+    LdStr,          // load a string literal from metadata
+
+    // ── Conversions ──────────────────────────────────────────────────────
+    ConvI1, ConvI2, ConvI4, ConvI8,    // signed
+    ConvU1, ConvU2, ConvU4, ConvU8,    // unsigned
+    ConvR4, ConvR8,                    // floating-point
+    ConvI, ConvU,                      // native int/uint
+    ConvOvfI1, ConvOvfI2, ConvOvfI4, ConvOvfI8,
+    ConvOvfU1, ConvOvfU2, ConvOvfU4, ConvOvfU8,
+
+    // ── Field and array access (C#) ──────────────────────────────────────
+    LdFld,          // ldfld
+    StFld,          // stfld
+    LdFlda,         // ldflda — managed pointer to a field
+    LdElem,         // ldelem.*
+    StElem,         // stelem.*
+    LdElemA,        // ldelema
+    NewArr,         // newarr
+
+    // ── Object operations ────────────────────────────────────────────────
+    NewObj,          // newobj — allocates and constructs
+    CallVirt,        // callvirt — virtual dispatch
+    Constrained,     // constrained. prefix for callvirt on a value type
+
+    // ── Locals and arguments (CIL) ───────────────────────────────────────
+    LdArg,           // ldarg.*
+    StArg,           // starg
+    LdLoc,           // ldloc.*
+    StLoc,           // stloc.*
+    LdArga,          // ldarga
+    LdLoca,          // ldloca
+
+    // ── Exception handling ──────────────────────────────────────────────
+    Throw,           // throw
+    Rethrow,         // rethrow
+    Leave,           // leave — jump out of try, runs finally
+    EndFinally,      // endfinally
 
     kCount,         // sentinel = number of node kinds
 };

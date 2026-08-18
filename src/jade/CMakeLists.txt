@@ -15,15 +15,19 @@ add_library(jade_core STATIC
     ir/passes/DeadCodeElimination.cpp
     ir/passes/GVN.cpp
     ir/passes/PassPipeline.cpp
+
+    cil/Opcode.cpp
 )
 jade_target_apply_hot_path_flags(jade_core)
 
-# ── Static library: jade_granit (Tier 0 interpreter) ──────────────────────
+# ── Static library: jade_granit (Tier 0 interpreter + CIL lowering) ──────
 # NOT the JIT proper — exceptions are allowed here for runtime error reporting
 # (granit errors are recoverable: abort interpretation, report to caller).
 add_library(jade_granit STATIC
     tier0_granit/Bytecode.cpp
+    tier0_granit/Value.cpp
     tier0_granit/Interpreter.cpp
+    cil/Lowerer.cpp
 )
 jade_target_apply_tooling_flags(jade_granit)
 target_link_libraries(jade_granit PUBLIC jade_core)

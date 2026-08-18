@@ -1,12 +1,14 @@
 # The .JADE Compiler Doctrine
 
-The master philosophy document. .JADE is a 4-tier, profile-driven, speculation-heavy JIT compiler for a dynamic language. It is designed for **maximum throughput** while preserving **byte-for-byte identical observable behavior** against the reference interpreter (`granit`).
+The master philosophy document. .JADE is a 4-tier, profile-driven, speculation-heavy JIT compiler for **C#**, written in C++23. It consumes CIL (ECMA-335) bytecode — as produced by Roslyn — and lowers it to a Sea of Nodes IR for optimization. The compiler is designed for **maximum throughput** while preserving **byte-for-byte identical observable behavior** against the reference interpreter (`granit`).
 
 Every architectural decision flows from three principles:
 
-1. **Profile, then speculate.** Static reasoning in dynamic languages is brittle. Profile data is the only reliable basis for speculation.
+1. **Profile, then speculate.** Even in a statically-typed language like C#, virtual dispatch, generics, nullable types, and `dynamic` create runtime polymorphism. Profile data is the only reliable basis for speculation.
 2. **Every speculation needs a guard, every guard needs a reconstructible deopt state.** No exceptions.
 3. **The IR is the heart.** The Sea of Nodes graph is optimized for fast traversal, cheap mutation, and explicit memory/effect dependencies.
+
+See [`08-csharp-target.md`](08-csharp-target.md) for the C#-specific design.
 
 ---
 
@@ -22,6 +24,7 @@ Every architectural decision flows from three principles:
 | `05-milestone.md` | Definition of Done (Initial) | The 8 acceptance criteria. |
 | `06-optimization-catalog.md` | Advanced Optimization Catalogue | PEA, SRA, GVN, GCM, LICM, SLP, vectorization, devirtualization. |
 | `07-standard-catalog.md` | Standard Optimization Catalogue | 12 categories of mechanical optimizations (constant folding, DCE, CFG simplification, etc.). |
+| `08-csharp-target.md` | **C# / CIL Target Specification** | CIL bytecode, CLR type system, value vs reference types, exception handling, per-tier C# specializations. |
 
 ---
 
@@ -31,8 +34,8 @@ The industry-standard layered approach, scaled to its absolute limit. Skipping t
 
 ```
               ┌──────────────┐
-   source ──► │   granit    │  Tier 0 — Interpreter
-              │  (T0, base)  │  Zero compilation latency, profile collection
+   CIL ─────► │   granit    │  Tier 0 — CIL Interpreter
+   (.dll)     │  (T0, base)  │  Zero compilation latency, profile collection
               └──────┬───────┘
                      │ after N invocations
                      ▼
@@ -50,22 +53,24 @@ The industry-standard layered approach, scaled to its absolute limit. Skipping t
                      ▼
               ┌──────────────┐
               │   DIAMOND    │  Tier 3 — Peak AOT/JIT Hybrid Optimizer
-              │   (T3)       │  PEA, SRA, SLP, vectorization, devirtualization
+              │   (T3)       │  PEA (box/unbox), SRA, SLP, vectorization, devirtualization
               └──────────────┘
 ```
 
-### Tier 0 — `granit` (Register-style Interpreter)
+### Tier 0 — `granit` (CIL Interpreter)
 - **Goal:** Zero compilation latency, instant startup, aggressive profile collection.
-- **Mechanics:** Executes stack bytecode while updating Inline Caches (ICs) and Type Feedback Vectors (TFVs). Maintains invocation/branch counters. Contains the Safepoint Polling logic (every loop back-edge and return checks an atomic flag for GC/JIT yield). Fast paths must perfectly match the runtime's native fast paths (e.g., INT+INT arithmetic inlined).
+- **Mechanics:** Executes CIL bytecode on a typed evaluation stack (int32/int64/F/object/&). Updates Inline Caches (ICs) and Type Feedback Vectors (TFVs). Maintains invocation/branch counters. Contains the Safepoint Polling logic (every loop back-edge and return checks an atomic flag for GC/JIT yield). Records observed boxed value types, callvirt receiver classes, and array shapes for downstream tiers.
 
 ### Tier 1 — `JADE` (Baseline SSA JIT)
 - **Goal:** Eliminate interpreter dispatch overhead in *milliseconds*. Provide stable baseline speed while higher tiers compile.
-- **Mechanics:** Standard CFG in SSA form. No heavy optimizations. Fast Linear-Scan register allocation. Emits monomorphic IC stubs (check observed shape → fast path; miss → runtime C++ call). Injects lightweight profiling traps to gather exact branch-taken frequencies for Tier 2/3.
+- **Mechanics:** Flat SSA graph (not yet SoN). Fast Linear-Scan register allocation. Emits monomorphic IC stubs for `callvirt` (check receiver's method table → fast path; miss → runtime stub). Honors `constrained.` prefix for value-type `callvirt` (avoids boxing). Injects lightweight profiling traps for Tier 2/3.
 
 ### Tier 2 — `RUBY` (Sea of Nodes Optimizing JIT)
 - **Goal:** Maximum throughput on consistently hot paths.
-- **Mechanics:** Sea of Nodes IR. Runs the core Gigavolt pipeline: Global Value Numbering (GVN), basic Escape Analysis, Loop Invariant Code Motion (LICM), Bounds Check Elimination (BCE), Global Code Motion (GCM), and On-Stack Replacement (OSR).
+- **Mechanics:** Full Sea of Nodes IR with explicit effect chains. Runs the core pipeline: Global Value Numbering (GVN), basic Escape Analysis (eliminates non-escaping allocations and `box`/`unbox` pairs), Loop Invariant Code Motion (LICM, including `ldlen` hoist), Bounds Check Elimination (BCE, for affine loop induction variables), Global Code Motion (GCM), and On-Stack Replacement (OSR).
 
 ### Tier 3 — `DIAMOND` (Peak AOT/JIT Hybrid Optimizer)
 - **Goal:** Absolute maximum performance. Practicality is secondary to raw speed and mechanical depth.
-- **Mechanics:** Consumes persistent Profile-Guided Optimization (PGO) data. Executes **Partial Escape Analysis (PEA)** to delay allocations to the exact point of escape, enabling Scalar Replacement of Aggregates (SRA) across complex control flow. Performs Superword Level Parallelism (SLP) auto-vectorization, aggressive loop unrolling/unswitching (guarded by strict cost models), and speculative devirtualization with multi-tiered guard chains.
+- **Mechanics:** Consumes persistent Profile-Guided Optimization (PGO) data. Executes **Partial Escape Analysis (PEA)** to delay `box` allocations to the exact control-flow path of escape, enabling Scalar Replacement of Aggregates (SRA) for boxed value types. Performs Superword Level Parallelism (SLP) auto-vectorization (e.g., for `Vector<T>` operations on adjacent array elements), aggressive loop unrolling/unswitching (guarded by strict cost models), and speculative devirtualization via Class Hierarchy Analysis (CHA). In AOT mode, performs Whole-Program Devirtualization (WPD).
+
+

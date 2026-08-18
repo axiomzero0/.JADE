@@ -25,7 +25,7 @@ constexpr NodeKindInfo kTable[] = {
     {"Switch",        false, false, true,  false, false, false, 1},     // value
     {"Jump",          false, false, true,  false, false, false, 0},
     {"Return",        false, true,  true,  false, false, false, 1},     // value
-    {"Throw",         false, true,  true,  false, false, false, 1},     // exception
+    // Throw moved to the exception-handling section below.
 
     // ── Constants ──
     {"ConstInt",      true,  false, false, false, false, false, 0},
@@ -90,6 +90,70 @@ constexpr NodeKindInfo kTable[] = {
     {"Safepoint",     false, true,  false, false, false, false, 0},
     {"Deopt",         false, true,  true,  false, false, false, 0},
     {"Unreachable",   false, false, true,  false, false, false, 0},
+
+    // ─────────────────────────────────────────────────────────────────────
+    // C# / CIL-specific node kinds (see docs/08-csharp-target.md)
+    // ─────────────────────────────────────────────────────────────────────
+
+    // ── Boxing and type conversions ──
+    {"Box",           false, true,  false, false, false, false, 1},     // value
+    {"Unbox",         false, true,  false, false, false, false, 1},     // obj
+    {"UnboxAny",      false, true,  false, false, false, false, 1},     // obj
+    {"IsInst",        false, true,  false, false, false, false, 1},     // obj
+    {"CastClass",     false, true,  false, false, false, false, 1},     // obj
+    {"LdNull",        true,  false, false, false, false, false, 0},
+    {"LdStr",         true,  false, false, false, false, false, 0},
+
+    // ── Conversions (pure) ──
+    {"ConvI1",        true,  false, false, false, false, false, 1},
+    {"ConvI2",        true,  false, false, false, false, false, 1},
+    {"ConvI4",        true,  false, false, false, false, false, 1},
+    {"ConvI8",        true,  false, false, false, false, false, 1},
+    {"ConvU1",        true,  false, false, false, false, false, 1},
+    {"ConvU2",        true,  false, false, false, false, false, 1},
+    {"ConvU4",        true,  false, false, false, false, false, 1},
+    {"ConvU8",        true,  false, false, false, false, false, 1},
+    {"ConvR4",        true,  false, false, false, false, false, 1},
+    {"ConvR8",        true,  false, false, false, false, false, 1},
+    {"ConvI",         true,  false, false, false, false, false, 1},
+    {"ConvU",         true,  false, false, false, false, false, 1},
+    {"ConvOvfI1",     false, true,  false, false, false, true,  1},      // can throw on overflow
+    {"ConvOvfI2",     false, true,  false, false, false, true,  1},
+    {"ConvOvfI4",     false, true,  false, false, false, true,  1},
+    {"ConvOvfI8",     false, true,  false, false, false, true,  1},
+    {"ConvOvfU1",     false, true,  false, false, false, true,  1},
+    {"ConvOvfU2",     false, true,  false, false, false, true,  1},
+    {"ConvOvfU4",     false, true,  false, false, false, true,  1},
+    {"ConvOvfU8",     false, true,  false, false, false, true,  1},
+
+    // ── Field and array access (C#) ──
+    {"LdFld",         false, true,  false, false, false, false, 1},     // obj
+    {"StFld",         false, true,  false, false, false, false, 2},     // obj, value
+    {"LdFlda",        false, true,  false, false, false, false, 1},     // obj
+    {"LdElem",        false, true,  false, false, false, false, 2},     // array, idx
+    {"StElem",        false, true,  false, false, false, false, 3},     // array, idx, value
+    {"LdElemA",       false, true,  false, false, false, false, 2},     // array, idx
+    {"NewArr",        false, true,  false, false, false, false, 1},     // length
+
+    // ── Object operations ──
+    {"NewObj",        false, true,  false, false, false, false, 0xFF},  // args...
+    {"CallVirt",      false, true,  false, false, false, false, 0xFF},  // this, args...
+    {"Constrained",   false, true,  false, false, false, false, 0},     // prefix; the
+                                                                                // callvirt follows
+
+    // ── Locals and arguments ──
+    {"LdArg",         true,  false, false, false, false, false, 0},
+    {"StArg",         false, true,  false, false, false, false, 1},
+    {"LdLoc",         true,  false, false, false, false, false, 0},
+    {"StLoc",         false, true,  false, false, false, false, 1},
+    {"LdArga",        true,  false, false, false, false, false, 0},
+    {"LdLoca",        true,  false, false, false, false, false, 0},
+
+    // ── Exception handling ──
+    {"Throw",         false, true,  true,  false, false, false, 1},
+    {"Rethrow",       false, true,  true,  false, false, false, 0},
+    {"Leave",         false, true,  true,  false, false, false, 0},
+    {"EndFinally",    false, true,  true,  false, false, false, 0},
 };
 
 static_assert(std::size(kTable) == static_cast<std::size_t>(NodeKind::kCount),
