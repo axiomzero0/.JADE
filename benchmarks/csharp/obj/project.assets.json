@@ -13,9 +13,9 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/home/z/my-project/.JADE/benchmarks/csharp/Benchmarks.csproj",
-      "projectName": "Benchmarks",
-      "projectPath": "/home/z/my-project/.JADE/benchmarks/csharp/Benchmarks.csproj",
+      "projectUniqueName": "/home/z/my-project/.JADE/benchmarks/csharp/MacroBench.csproj",
+      "projectName": "MacroBench",
+      "projectPath": "/home/z/my-project/.JADE/benchmarks/csharp/MacroBench.csproj",
       "packagesPath": "/home/z/.nuget/packages/",
       "outputPath": "/home/z/my-project/.JADE/benchmarks/csharp/obj/",
       "projectStyle": "PackageReference",

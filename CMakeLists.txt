@@ -97,6 +97,32 @@ if(JADE_BUILD_BENCHMARKS)
     if(TARGET asmjit::asmjit)
         target_link_libraries(jade_micro_bench PRIVATE asmjit::asmjit)
     endif()
+
+    # Macrobenchmark suite: realistic workloads.
+    add_executable(jade_macro_bench benchmarks/macro/macro_bench.cpp)
+    jade_target_apply_tooling_flags(jade_macro_bench)
+    target_include_directories(jade_macro_bench PRIVATE benchmarks)
+    if(TARGET asmjit::asmjit)
+        target_link_libraries(jade_macro_bench PRIVATE asmjit::asmjit)
+    endif()
+
+    # Stress benchmarks: pathology detection.
+    add_executable(jade_stress_bench benchmarks/stress/stress_bench.cpp)
+    jade_target_apply_tooling_flags(jade_stress_bench)
+    target_include_directories(jade_stress_bench PRIVATE benchmarks)
+    if(TARGET asmjit::asmjit)
+        target_link_libraries(jade_stress_bench PRIVATE asmjit::asmjit)
+    endif()
+
+    # Startup benchmarks: compile time + warmup.
+    add_executable(jade_startup_bench benchmarks/startup/startup_bench.cpp)
+    jade_target_apply_tooling_flags(jade_startup_bench)
+    target_include_directories(jade_startup_bench PRIVATE benchmarks)
+    target_link_libraries(jade_startup_bench PRIVATE jade_core jade_granit)
+    if(TARGET jade_tier1)
+        target_link_libraries(jade_startup_bench PRIVATE jade_tier1)
+        target_compile_definitions(jade_startup_bench PRIVATE JADE_HAVE_ASMJIT=1)
+    endif()
 endif()
 
 # ─────────────────────────────────────────────────────────────────────────────

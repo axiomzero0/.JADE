@@ -1,0 +1,15 @@
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/MacroBench.GeneratedMSBuildEditorConfig.editorconfig
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/MacroBench.AssemblyInfoInputs.cache
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/MacroBench.AssemblyInfo.cs
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/MacroBench.csproj.CoreCompileInputs.cache
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/MacroBench.sourcelink.json
+/home/z/my-project/.JADE/benchmarks/csharp/bin/Release/net9.0/MacroBench
+/home/z/my-project/.JADE/benchmarks/csharp/bin/Release/net9.0/MacroBench.deps.json
+/home/z/my-project/.JADE/benchmarks/csharp/bin/Release/net9.0/MacroBench.runtimeconfig.json
+/home/z/my-project/.JADE/benchmarks/csharp/bin/Release/net9.0/MacroBench.dll
+/home/z/my-project/.JADE/benchmarks/csharp/bin/Release/net9.0/MacroBench.pdb
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/MacroBench.dll
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/refint/MacroBench.dll
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/MacroBench.pdb
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/MacroBench.genruntimeconfig.cache
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/ref/MacroBench.dll

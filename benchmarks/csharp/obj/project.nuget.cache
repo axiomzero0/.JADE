@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "k+AnZVtDC0o=",
+  "dgSpecHash": "4fxgmI3hf24=",
   "success": true,
-  "projectFilePath": "/home/z/my-project/.JADE/benchmarks/csharp/Benchmarks.csproj",
+  "projectFilePath": "/home/z/my-project/.JADE/benchmarks/csharp/MacroBench.csproj",
   "expectedPackageFiles": [],
   "logs": []
 }
