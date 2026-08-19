@@ -737,6 +737,16 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
                     std::format("emit: virtual call emission requires runtime support; "
                                 "falling back to granit (node %{})", id.value)));
 
+            // ── Materialize (PEA) → allocate + write fields ──
+            // This is emitted as an Allocate + series of StoreField ops.
+            // For now, we can't emit runtime allocation in the JIT, so
+            // we fall back to granit. When the runtime allocator is wired,
+            // this will emit: call alloc_helper; mov [obj+offset], val; ...
+            case NodeKind::Materialize:
+                return std::unexpected(make_error(ErrorKind::UnsupportedNode,
+                    std::format("emit: Materialize requires runtime allocator; "
+                                "falling back to granit (node %{})", id.value)));
+
             case NodeKind::Return: {
                 auto inputs = graph.data_inputs(id);
                 if (inputs.size() == 1) {

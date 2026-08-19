@@ -165,6 +165,9 @@ constexpr NodeKindInfo kTable[] = {
 
     // ── Invokedynamic ──
     {"InvokeDynamic", false, true,  false, false, false, false, 0xFF}, // args...
+
+    // ── PEA materialization ──
+    {"Materialize",  false, true,  false, false, false, false, 0xFF}, // field values...
 };
 
 static_assert(std::size(kTable) == static_cast<std::size_t>(NodeKind::kCount),

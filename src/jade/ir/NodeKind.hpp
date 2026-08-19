@@ -140,6 +140,11 @@ enum class NodeKind : uint8_t {
     // ── Invokedynamic (lambdas, string concat) ──────────────────────────
     InvokeDynamic,   // invokedynamic — resolves through a bootstrap method
 
+    // ── PEA materialization (DIAMOND tier) ──────────────────────────────
+    Materialize,     // PEA: heap-allocate a scalar-replaced object at the
+                     // exact point where it escapes. Inputs: field values.
+                     // Output: the materialized object reference.
+
     kCount,         // sentinel = number of node kinds
 };
 
