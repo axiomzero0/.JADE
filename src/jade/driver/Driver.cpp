@@ -150,14 +150,23 @@ Result<int> run_driver(int argc, char** argv) {
 
         if (opts.optimization_level >= 2) {
             PassContext ctx;
-            auto pipe = build_ruby_pipeline();
+            std::unique_ptr<PassPipeline> pipe;
+            if (opts.optimization_level >= 3) {
+                pipe = build_diamond_pipeline();
+            } else {
+                pipe = build_ruby_pipeline();
+            }
             auto pr = pipe->run(g, ctx);
             if (!pr) {
                 std::println(stderr, "pipeline error: {}", pr.error().what());
                 return 1;
             }
             if (opts.dump_ir) {
-                std::println("--- IR (after RUBY pipeline) ---");
+                if (opts.optimization_level >= 3) {
+                    std::println("--- IR (after DIAMOND pipeline) ---");
+                } else {
+                    std::println("--- IR (after RUBY pipeline) ---");
+                }
                 std::print("{}", g.dump());
             }
         }

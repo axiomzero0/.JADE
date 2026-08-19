@@ -100,18 +100,21 @@ namespace {
 
 void Interpreter::push(Value v) {
     stack_.push_back(std::move(v));
-    if (stack_.size() > max_stack_depth_) max_stack_depth_ = stack_.size();
+    if (__builtin_expect(stack_.size() > max_stack_depth_, 0))
+        max_stack_depth_ = stack_.size();
 }
 
 Value Interpreter::pop() {
-    if (stack_.empty()) throw std::runtime_error("stack underflow");
+    if (__builtin_expect(stack_.empty(), 0))
+        throw std::runtime_error("stack underflow");
     Value v = std::move(stack_.back());
     stack_.pop_back();
     return v;
 }
 
 Value& Interpreter::top() {
-    if (stack_.empty()) throw std::runtime_error("stack empty");
+    if (__builtin_expect(stack_.empty(), 0))
+        throw std::runtime_error("stack empty");
     return stack_.back();
 }
 
