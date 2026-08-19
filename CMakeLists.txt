@@ -72,6 +72,18 @@ if(JADE_BUILD_BENCHMARKS)
         target_link_libraries(jade_bench PRIVATE jade_tier1)
         target_compile_definitions(jade_bench PRIVATE JADE_HAVE_ASMJIT=1)
     endif()
+
+    # Loop benchmark: emits native x86-64 loops to match .NET per-iteration cost.
+    add_executable(jade_loop_bench benchmarks/jade/loop_benchmark.cpp)
+    jade_target_apply_tooling_flags(jade_loop_bench)
+    target_link_libraries(jade_loop_bench PRIVATE jade_core jade_granit)
+    if(TARGET jade_tier1)
+        target_link_libraries(jade_loop_bench PRIVATE jade_tier1)
+        target_compile_definitions(jade_loop_bench PRIVATE JADE_HAVE_ASMJIT=1)
+    endif()
+    if(TARGET asmjit::asmjit)
+        target_link_libraries(jade_loop_bench PRIVATE asmjit::asmjit)
+    endif()
 endif()
 
 # ─────────────────────────────────────────────────────────────────────────────
