@@ -49,7 +49,7 @@ TEST(JvmInterpreterTest, Iconst5AndIReturn) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), 5);
+    EXPECT_EQ(r->as_int32(), 5);
 }
 
 TEST(JvmInterpreterTest, IaddTwoConstants) {
@@ -63,7 +63,7 @@ TEST(JvmInterpreterTest, IaddTwoConstants) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 5);
+    EXPECT_EQ(r->as_int32(), 5);
 }
 
 TEST(JvmInterpreterTest, IsubTwoConstants) {
@@ -76,7 +76,7 @@ TEST(JvmInterpreterTest, IsubTwoConstants) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 2);
+    EXPECT_EQ(r->as_int32(), 2);
 }
 
 TEST(JvmInterpreterTest, ImulTwoConstants) {
@@ -89,7 +89,7 @@ TEST(JvmInterpreterTest, ImulTwoConstants) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 6);
+    EXPECT_EQ(r->as_int32(), 6);
 }
 
 TEST(JvmInterpreterTest, IdivByZeroThrows) {
@@ -115,7 +115,7 @@ TEST(JvmInterpreterTest, IloadIstoreRoundTrip) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 1, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 5);
+    EXPECT_EQ(r->as_int32(), 5);
 }
 
 TEST(JvmInterpreterTest, Iinc) {
@@ -130,7 +130,7 @@ TEST(JvmInterpreterTest, Iinc) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 1, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 5);
+    EXPECT_EQ(r->as_int32(), 5);
 }
 
 TEST(JvmInterpreterTest, BitwiseAnd) {
@@ -143,7 +143,7 @@ TEST(JvmInterpreterTest, BitwiseAnd) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 1);   // 5 & 3 = 1
+    EXPECT_EQ(r->as_int32(), 1);   // 5 & 3 = 1
 }
 
 TEST(JvmInterpreterTest, IfneBranchTaken) {
@@ -160,7 +160,7 @@ TEST(JvmInterpreterTest, IfneBranchTaken) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 1);
+    EXPECT_EQ(r->as_int32(), 1);
 }
 
 TEST(JvmInterpreterTest, Dup) {
@@ -174,7 +174,7 @@ TEST(JvmInterpreterTest, Dup) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 10);
+    EXPECT_EQ(r->as_int32(), 10);
 }
 
 TEST(JvmInterpreterTest, Bipush) {
@@ -183,7 +183,7 @@ TEST(JvmInterpreterTest, Bipush) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 42);
+    EXPECT_EQ(r->as_int32(), 42);
 }
 
 TEST(JvmInterpreterTest, ChainedArithmetic) {
@@ -199,7 +199,7 @@ TEST(JvmInterpreterTest, ChainedArithmetic) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 20);
+    EXPECT_EQ(r->as_int32(), 20);
 }
 
 TEST(JvmInterpreterTest, LconstAndLreturn) {
@@ -208,7 +208,7 @@ TEST(JvmInterpreterTest, LconstAndLreturn) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int64_t>(*r), 1LL);
+    EXPECT_EQ(r->as_int64(), 1LL);
 }
 
 TEST(JvmInterpreterTest, LcmpEqualReturns0) {
@@ -222,7 +222,7 @@ TEST(JvmInterpreterTest, LcmpEqualReturns0) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 0);
+    EXPECT_EQ(r->as_int32(), 0);
 }
 
 TEST(JvmInterpreterTest, Ineg) {
@@ -231,7 +231,7 @@ TEST(JvmInterpreterTest, Ineg) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), -5);
+    EXPECT_EQ(r->as_int32(), -5);
 }
 
 TEST(JvmInterpreterTest, VoidReturn) {
@@ -241,7 +241,7 @@ TEST(JvmInterpreterTest, VoidReturn) {
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
     // Void return produces monostate.
-    EXPECT_TRUE(std::holds_alternative<std::monostate>(*r));
+    EXPECT_TRUE(r->is_uninit());
 }
 
 TEST(JvmInterpreterTest, I2lConversion) {
@@ -250,5 +250,5 @@ TEST(JvmInterpreterTest, I2lConversion) {
     JvmInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int64_t>(*r), 5LL);
+    EXPECT_EQ(r->as_int64(), 5LL);
 }

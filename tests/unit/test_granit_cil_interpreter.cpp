@@ -47,7 +47,7 @@ TEST(CilInterpreterTest, LdcI4AndRet) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), 42);
+    EXPECT_EQ(r->as_int32(), 42);
 }
 
 TEST(CilInterpreterTest, LdcI4ShortForms) {
@@ -60,7 +60,7 @@ TEST(CilInterpreterTest, LdcI4ShortForms) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 1);
+    EXPECT_EQ(r->as_int32(), 1);
 }
 
 TEST(CilInterpreterTest, AddTwoIntegers) {
@@ -74,7 +74,7 @@ TEST(CilInterpreterTest, AddTwoIntegers) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 7);
+    EXPECT_EQ(r->as_int32(), 7);
 }
 
 TEST(CilInterpreterTest, SubtractTwoIntegers) {
@@ -87,7 +87,7 @@ TEST(CilInterpreterTest, SubtractTwoIntegers) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 6);
+    EXPECT_EQ(r->as_int32(), 6);
 }
 
 TEST(CilInterpreterTest, MultiplyTwoIntegers) {
@@ -100,7 +100,7 @@ TEST(CilInterpreterTest, MultiplyTwoIntegers) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 42);
+    EXPECT_EQ(r->as_int32(), 42);
 }
 
 TEST(CilInterpreterTest, DivideTwoIntegers) {
@@ -113,7 +113,7 @@ TEST(CilInterpreterTest, DivideTwoIntegers) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 5);
+    EXPECT_EQ(r->as_int32(), 5);
 }
 
 TEST(CilInterpreterTest, DivideByZeroThrows) {
@@ -139,17 +139,17 @@ TEST(CilInterpreterTest, LdLocStLocRoundTrip) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 1, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 99);
+    EXPECT_EQ(r->as_int32(), 99);
 }
 
 TEST(CilInterpreterTest, LdArg) {
     // ldarg.0; ret
     auto bytes = CilEncoder().emit1(0x02).emit1(0x2A).build();
     CilInterpreter interp;
-    std::vector<Value> args = {Value{int32_t{777}}};
+    std::vector<Value> args = {Value::from_int32(777)};
     auto r = interp.run(bytes, 0, 1, std::move(args));
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 777);
+    EXPECT_EQ(r->as_int32(), 777);
 }
 
 TEST(CilInterpreterTest, BitwiseAnd) {
@@ -163,7 +163,7 @@ TEST(CilInterpreterTest, BitwiseAnd) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 0x0F);
+    EXPECT_EQ(r->as_int32(), 0x0F);
 }
 
 TEST(CilInterpreterTest, BitwiseOr) {
@@ -176,7 +176,7 @@ TEST(CilInterpreterTest, BitwiseOr) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 0xFF);
+    EXPECT_EQ(r->as_int32(), 0xFF);
 }
 
 TEST(CilInterpreterTest, ShiftLeft) {
@@ -189,7 +189,7 @@ TEST(CilInterpreterTest, ShiftLeft) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 16);
+    EXPECT_EQ(r->as_int32(), 16);
 }
 
 TEST(CilInterpreterTest, CeqReturns1OnEqual) {
@@ -203,7 +203,7 @@ TEST(CilInterpreterTest, CeqReturns1OnEqual) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 1);
+    EXPECT_EQ(r->as_int32(), 1);
 }
 
 TEST(CilInterpreterTest, CeqReturns0OnNotEqual) {
@@ -216,7 +216,7 @@ TEST(CilInterpreterTest, CeqReturns0OnNotEqual) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 0);
+    EXPECT_EQ(r->as_int32(), 0);
 }
 
 TEST(CilInterpreterTest, BrfalseTaken) {
@@ -240,7 +240,7 @@ TEST(CilInterpreterTest, BrfalseTaken) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 42);
+    EXPECT_EQ(r->as_int32(), 42);
 }
 
 TEST(CilInterpreterTest, BrfalseNotTaken) {
@@ -257,7 +257,7 @@ TEST(CilInterpreterTest, BrfalseNotTaken) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 99);
+    EXPECT_EQ(r->as_int32(), 99);
 }
 
 TEST(CilInterpreterTest, Dup) {
@@ -271,7 +271,7 @@ TEST(CilInterpreterTest, Dup) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 10);
+    EXPECT_EQ(r->as_int32(), 10);
 }
 
 TEST(CilInterpreterTest, ConvI8) {
@@ -284,7 +284,7 @@ TEST(CilInterpreterTest, ConvI8) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int64_t>(*r), 42LL);
+    EXPECT_EQ(r->as_int64(), 42LL);
 }
 
 TEST(CilInterpreterTest, ChainedArithmetic) {
@@ -300,7 +300,7 @@ TEST(CilInterpreterTest, ChainedArithmetic) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), 35);
+    EXPECT_EQ(r->as_int32(), 35);
 }
 
 TEST(CilInterpreterTest, LdcI4SCoversNegative) {
@@ -309,7 +309,7 @@ TEST(CilInterpreterTest, LdcI4SCoversNegative) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), -1);
+    EXPECT_EQ(r->as_int32(), -1);
 }
 
 TEST(CilInterpreterTest, Neg) {
@@ -321,5 +321,5 @@ TEST(CilInterpreterTest, Neg) {
     CilInterpreter interp;
     auto r = interp.run(bytes, 0, 0);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(std::get<int32_t>(*r), -5);
+    EXPECT_EQ(r->as_int32(), -5);
 }

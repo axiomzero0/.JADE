@@ -15,21 +15,21 @@ namespace jade::granit {
 namespace {
 
 [[nodiscard]] int32_t as_i32(const Value& v) {
-    if (std::holds_alternative<int32_t>(v)) return std::get<int32_t>(v);
-    if (std::holds_alternative<int64_t>(v)) return static_cast<int32_t>(std::get<int64_t>(v));
+    if (v.is_int32()) return v.as_int32();
+    if (v.is_int64()) return static_cast<int32_t>(v.as_int64());
     throw std::runtime_error("JVM: expected int on stack");
 }
 
 [[nodiscard]] int64_t as_i64(const Value& v) {
-    if (std::holds_alternative<int64_t>(v)) return std::get<int64_t>(v);
-    if (std::holds_alternative<int32_t>(v)) return std::get<int32_t>(v);
+    if (v.is_int64()) return v.as_int64();
+    if (v.is_int32()) return v.as_int32();
     throw std::runtime_error("JVM: expected long on stack");
 }
 
 [[nodiscard]] double as_f64(const Value& v) {
-    if (std::holds_alternative<double>(v)) return std::get<double>(v);
-    if (std::holds_alternative<int32_t>(v)) return static_cast<double>(std::get<int32_t>(v));
-    if (std::holds_alternative<int64_t>(v)) return static_cast<double>(std::get<int64_t>(v));
+    if (v.is_float()) return v.as_float();
+    if (v.is_int32()) return static_cast<double>(v.as_int32());
+    if (v.is_int64()) return static_cast<double>(v.as_int64());
     throw std::runtime_error("JVM: expected float/double on stack");
 }
 
@@ -72,27 +72,27 @@ Result<Value> JvmInterpreter::run(std::span<const uint8_t> code,
                     break;
 
                 // ── Constants ──
-                case jvm::JvmOpcode::AconstNull:  frame.push(make_null_object()); break;
-                case jvm::JvmOpcode::IconstM1:    frame.push(int32_t{-1}); break;
-                case jvm::JvmOpcode::Iconst0:    frame.push(int32_t{0}); break;
-                case jvm::JvmOpcode::Iconst1:    frame.push(int32_t{1}); break;
-                case jvm::JvmOpcode::Iconst2:    frame.push(int32_t{2}); break;
-                case jvm::JvmOpcode::Iconst3:    frame.push(int32_t{3}); break;
-                case jvm::JvmOpcode::Iconst4:    frame.push(int32_t{4}); break;
-                case jvm::JvmOpcode::Iconst5:    frame.push(int32_t{5}); break;
-                case jvm::JvmOpcode::Lconst0:    frame.push(int64_t{0}); break;
-                case jvm::JvmOpcode::Lconst1:    frame.push(int64_t{1}); break;
-                case jvm::JvmOpcode::Fconst0:    frame.push(double{0.0}); break;
-                case jvm::JvmOpcode::Fconst1:    frame.push(double{1.0}); break;
-                case jvm::JvmOpcode::Fconst2:    frame.push(double{2.0}); break;
-                case jvm::JvmOpcode::Dconst0:    frame.push(double{0.0}); break;
-                case jvm::JvmOpcode::Dconst1:    frame.push(double{1.0}); break;
-                case jvm::JvmOpcode::Bipush:    frame.push(static_cast<int32_t>(d.operand_i32)); break;
-                case jvm::JvmOpcode::Sipush:    frame.push(static_cast<int32_t>(d.operand_i32)); break;
+                case jvm::JvmOpcode::AconstNull:  frame.push(Value::null_value()); break;
+                case jvm::JvmOpcode::IconstM1:    frame.push(Value::from_int32(-1)); break;
+                case jvm::JvmOpcode::Iconst0:    frame.push(Value::from_int32(0)); break;
+                case jvm::JvmOpcode::Iconst1:    frame.push(Value::from_int32(1)); break;
+                case jvm::JvmOpcode::Iconst2:    frame.push(Value::from_int32(2)); break;
+                case jvm::JvmOpcode::Iconst3:    frame.push(Value::from_int32(3)); break;
+                case jvm::JvmOpcode::Iconst4:    frame.push(Value::from_int32(4)); break;
+                case jvm::JvmOpcode::Iconst5:    frame.push(Value::from_int32(5)); break;
+                case jvm::JvmOpcode::Lconst0:    frame.push(Value::from_int64(0)); break;
+                case jvm::JvmOpcode::Lconst1:    frame.push(Value::from_int64(1)); break;
+                case jvm::JvmOpcode::Fconst0:    frame.push(Value::from_float(0.0)); break;
+                case jvm::JvmOpcode::Fconst1:    frame.push(Value::from_float(1.0)); break;
+                case jvm::JvmOpcode::Fconst2:    frame.push(Value::from_float(2.0)); break;
+                case jvm::JvmOpcode::Dconst0:    frame.push(Value::from_float(0.0)); break;
+                case jvm::JvmOpcode::Dconst1:    frame.push(Value::from_float(1.0)); break;
+                case jvm::JvmOpcode::Bipush:    frame.push(Value::from_int32(static_cast<int32_t>(d.operand_i32))); break;
+                case jvm::JvmOpcode::Sipush:    frame.push(Value::from_int32(static_cast<int32_t>(d.operand_i32))); break;
                 case jvm::JvmOpcode::Ldc:
                 case jvm::JvmOpcode::LdcW:
                 case jvm::JvmOpcode::Ldc2W:
-                    frame.push(static_cast<int64_t>(d.operand_u32)); break;
+                    frame.push(Value::from_int64(static_cast<int64_t>(d.operand_u32))); break;
 
                 // ── Locals (load) ──
                 case jvm::JvmOpcode::Iload: case jvm::JvmOpcode::Lload:
@@ -149,7 +149,7 @@ Result<Value> JvmInterpreter::run(std::span<const uint8_t> code,
                 // ── iinc ──
                 case jvm::JvmOpcode::Iinc: {
                     int32_t cur = as_i32(frame.locals[d.operand_u32]);
-                    frame.locals[d.operand_u32] = Value{wrap_add_i32(cur, d.operand_i32)};
+                    frame.locals[d.operand_u32] = Value::from_int32(wrap_add_i32(cur, d.operand_i32));
                     break;
                 }
 
@@ -171,53 +171,53 @@ Result<Value> JvmInterpreter::run(std::span<const uint8_t> code,
                 // ── Arithmetic (int) ──
                 case jvm::JvmOpcode::Iadd: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{wrap_add_i32(as_i32(a), as_i32(b))});
+                    frame.push(Value::from_int32(wrap_add_i32(as_i32(a), as_i32(b))));
                     break;
                 }
                 case jvm::JvmOpcode::Isub: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{wrap_sub_i32(as_i32(a), as_i32(b))});
+                    frame.push(Value::from_int32(wrap_sub_i32(as_i32(a), as_i32(b))));
                     break;
                 }
                 case jvm::JvmOpcode::Imul: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{wrap_mul_i32(as_i32(a), as_i32(b))});
+                    frame.push(Value::from_int32(wrap_mul_i32(as_i32(a), as_i32(b))));
                     break;
                 }
                 case jvm::JvmOpcode::Idiv: {
                     Value b = frame.pop(); Value a = frame.pop();
                     int32_t bv = as_i32(b);
                     if (bv == 0) throw std::runtime_error("ArithmeticException: / by zero");
-                    frame.push(Value{as_i32(a) / bv});
+                    frame.push(Value::from_int32(as_i32(a) / bv));
                     break;
                 }
                 case jvm::JvmOpcode::Irem: {
                     Value b = frame.pop(); Value a = frame.pop();
                     int32_t bv = as_i32(b);
                     if (bv == 0) throw std::runtime_error("ArithmeticException: / by zero");
-                    frame.push(Value{as_i32(a) % bv});
+                    frame.push(Value::from_int32(as_i32(a) % bv));
                     break;
                 }
                 case jvm::JvmOpcode::Ineg: {
                     Value a = frame.pop();
-                    frame.push(Value{-as_i32(a)});
+                    frame.push(Value::from_int32(-as_i32(a)));
                     break;
                 }
 
                 // ── Arithmetic (long) ──
                 case jvm::JvmOpcode::Ladd: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{wrap_add_i64(as_i64(a), as_i64(b))});
+                    frame.push(Value::from_int64(wrap_add_i64(as_i64(a), as_i64(b))));
                     break;
                 }
                 case jvm::JvmOpcode::Lsub: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{wrap_sub_i64(as_i64(a), as_i64(b))});
+                    frame.push(Value::from_int64(wrap_sub_i64(as_i64(a), as_i64(b))));
                     break;
                 }
                 case jvm::JvmOpcode::Lmul: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{wrap_mul_i64(as_i64(a), as_i64(b))});
+                    frame.push(Value::from_int64(wrap_mul_i64(as_i64(a), as_i64(b))));
                     break;
                 }
 
@@ -225,82 +225,82 @@ Result<Value> JvmInterpreter::run(std::span<const uint8_t> code,
                 case jvm::JvmOpcode::Fadd:
                 case jvm::JvmOpcode::Dadd: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_f64(a) + as_f64(b)});
+                    frame.push(Value::from_float(as_f64(a) + as_f64(b)));
                     break;
                 }
                 case jvm::JvmOpcode::Fsub:
                 case jvm::JvmOpcode::Dsub: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_f64(a) - as_f64(b)});
+                    frame.push(Value::from_float(as_f64(a) - as_f64(b)));
                     break;
                 }
                 case jvm::JvmOpcode::Fmul:
                 case jvm::JvmOpcode::Dmul: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_f64(a) * as_f64(b)});
+                    frame.push(Value::from_float(as_f64(a) * as_f64(b)));
                     break;
                 }
                 case jvm::JvmOpcode::Fdiv:
                 case jvm::JvmOpcode::Ddiv: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_f64(a) / as_f64(b)});
+                    frame.push(Value::from_float(as_f64(a) / as_f64(b)));
                     break;
                 }
 
                 // ── Bitwise ──
                 case jvm::JvmOpcode::Iand: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_i32(a) & as_i32(b)});
+                    frame.push(Value::from_int32(as_i32(a) & as_i32(b)));
                     break;
                 }
                 case jvm::JvmOpcode::Ior: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_i32(a) | as_i32(b)});
+                    frame.push(Value::from_int32(as_i32(a) | as_i32(b)));
                     break;
                 }
                 case jvm::JvmOpcode::Ixor: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_i32(a) ^ as_i32(b)});
+                    frame.push(Value::from_int32(as_i32(a) ^ as_i32(b)));
                     break;
                 }
                 case jvm::JvmOpcode::Ishl: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_i32(a) << (as_i32(b) & 31)});
+                    frame.push(Value::from_int32(as_i32(a) << (as_i32(b) & 31)));
                     break;
                 }
                 case jvm::JvmOpcode::Ishr: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_i32(a) >> (as_i32(b) & 31)});
+                    frame.push(Value::from_int32(as_i32(a) >> (as_i32(b) & 31)));
                     break;
                 }
                 case jvm::JvmOpcode::Iushr: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{static_cast<int32_t>(static_cast<uint32_t>(as_i32(a)) >> (as_i32(b) & 31))});
+                    frame.push(Value::from_int32(static_cast<int32_t>(static_cast<uint32_t>(as_i32(a)) >> (as_i32(b) & 31))));
                     break;
                 }
 
                 // ── Conversions ──
-                case jvm::JvmOpcode::I2l: { Value a = frame.pop(); frame.push(Value{static_cast<int64_t>(as_i32(a))}); break; }
+                case jvm::JvmOpcode::I2l: { Value a = frame.pop(); frame.push(Value::from_int64(static_cast<int64_t>(as_i32(a)))); break; }
                 case jvm::JvmOpcode::I2f:
-                case jvm::JvmOpcode::I2d: { Value a = frame.pop(); frame.push(Value{static_cast<double>(as_i32(a))}); break; }
-                case jvm::JvmOpcode::L2i: { Value a = frame.pop(); frame.push(Value{static_cast<int32_t>(as_i64(a))}); break; }
+                case jvm::JvmOpcode::I2d: { Value a = frame.pop(); frame.push(Value::from_float(static_cast<double>(as_i32(a)))); break; }
+                case jvm::JvmOpcode::L2i: { Value a = frame.pop(); frame.push(Value::from_int32(static_cast<int32_t>(as_i64(a)))); break; }
                 case jvm::JvmOpcode::L2f:
-                case jvm::JvmOpcode::L2d: { Value a = frame.pop(); frame.push(Value{static_cast<double>(as_i64(a))}); break; }
+                case jvm::JvmOpcode::L2d: { Value a = frame.pop(); frame.push(Value::from_float(static_cast<double>(as_i64(a)))); break; }
                 case jvm::JvmOpcode::F2i:
-                case jvm::JvmOpcode::D2i: { Value a = frame.pop(); frame.push(Value{static_cast<int32_t>(as_f64(a))}); break; }
+                case jvm::JvmOpcode::D2i: { Value a = frame.pop(); frame.push(Value::from_int32(static_cast<int32_t>(as_f64(a)))); break; }
                 case jvm::JvmOpcode::F2l:
-                case jvm::JvmOpcode::D2l: { Value a = frame.pop(); frame.push(Value{static_cast<int64_t>(as_f64(a))}); break; }
+                case jvm::JvmOpcode::D2l: { Value a = frame.pop(); frame.push(Value::from_int64(static_cast<int64_t>(as_f64(a)))); break; }
                 case jvm::JvmOpcode::F2d:
                 case jvm::JvmOpcode::D2f: { break; }  // both are double on our stack
-                case jvm::JvmOpcode::I2b: { Value a = frame.pop(); frame.push(Value{static_cast<int32_t>(static_cast<int8_t>(as_i32(a)))}); break; }
-                case jvm::JvmOpcode::I2c: { Value a = frame.pop(); frame.push(Value{static_cast<int32_t>(static_cast<uint16_t>(as_i32(a)))}); break; }
-                case jvm::JvmOpcode::I2s: { Value a = frame.pop(); frame.push(Value{static_cast<int32_t>(static_cast<int16_t>(as_i32(a)))}); break; }
+                case jvm::JvmOpcode::I2b: { Value a = frame.pop(); frame.push(Value::from_int32(static_cast<int32_t>(static_cast<int8_t>(as_i32(a))))); break; }
+                case jvm::JvmOpcode::I2c: { Value a = frame.pop(); frame.push(Value::from_int32(static_cast<int32_t>(static_cast<uint16_t>(as_i32(a))))); break; }
+                case jvm::JvmOpcode::I2s: { Value a = frame.pop(); frame.push(Value::from_int32(static_cast<int32_t>(static_cast<int16_t>(as_i32(a))))); break; }
 
                 // ── Comparisons ──
                 case jvm::JvmOpcode::Lcmp: {
                     Value b = frame.pop(); Value a = frame.pop();
                     int64_t av = as_i64(a), bv = as_i64(b);
-                    frame.push(Value{av < bv ? int32_t{-1} : (av > bv ? int32_t{1} : int32_t{0})});
+                    frame.push(Value::from_int32(av < bv ? -1 : (av > bv ? 1 : 0)));
                     break;
                 }
                 case jvm::JvmOpcode::Fcmpl:
@@ -309,7 +309,7 @@ Result<Value> JvmInterpreter::run(std::span<const uint8_t> code,
                 case jvm::JvmOpcode::Dcmpg: {
                     Value b = frame.pop(); Value a = frame.pop();
                     double av = as_f64(a), bv = as_f64(b);
-                    frame.push(Value{av < bv ? int32_t{-1} : (av > bv ? int32_t{1} : int32_t{0})});
+                    frame.push(Value::from_int32(av < bv ? -1 : (av > bv ? 1 : 0)));
                     break;
                 }
 
@@ -326,13 +326,13 @@ Result<Value> JvmInterpreter::run(std::span<const uint8_t> code,
                 case jvm::JvmOpcode::IfIcmpge: { Value b = frame.pop(); Value a = frame.pop(); if (as_i32(a) >= as_i32(b)) { frame.pc += d.operand_i32; poll_safepoint(); continue; } break; }
                 case jvm::JvmOpcode::IfIcmpgt: { Value b = frame.pop(); Value a = frame.pop(); if (as_i32(a) >  as_i32(b)) { frame.pc += d.operand_i32; poll_safepoint(); continue; } break; }
                 case jvm::JvmOpcode::IfIcmple: { Value b = frame.pop(); Value a = frame.pop(); if (as_i32(a) <= as_i32(b)) { frame.pc += d.operand_i32; poll_safepoint(); continue; } break; }
-                case jvm::JvmOpcode::Ifnull: { Value v = frame.pop(); if (std::holds_alternative<ObjectHandle>(v) && std::get<ObjectHandle>(v).is_null()) { frame.pc += d.operand_i32; poll_safepoint(); continue; } break; }
-                case jvm::JvmOpcode::Ifnonnull: { Value v = frame.pop(); if (!(std::holds_alternative<ObjectHandle>(v) && std::get<ObjectHandle>(v).is_null())) { frame.pc += d.operand_i32; poll_safepoint(); continue; } break; }
+                case jvm::JvmOpcode::Ifnull: { Value v = frame.pop(); if (v.is_object() && v.as_object().is_null()) { frame.pc += d.operand_i32; poll_safepoint(); continue; } break; }
+                case jvm::JvmOpcode::Ifnonnull: { Value v = frame.pop(); if (!(v.is_object() && v.as_object().is_null())) { frame.pc += d.operand_i32; poll_safepoint(); continue; } break; }
                 case jvm::JvmOpcode::Goto: { frame.pc += d.operand_i32; poll_safepoint(); continue; }
                 case jvm::JvmOpcode::GotoW: { frame.pc += d.operand_i32; poll_safepoint(); continue; }
 
                 // ── Return ──
-                case jvm::JvmOpcode::Return: { poll_safepoint(); return Value{std::monostate{}}; }
+                case jvm::JvmOpcode::Return: { poll_safepoint(); return Value::uninit(); }
                 case jvm::JvmOpcode::Ireturn: { Value r = frame.pop(); poll_safepoint(); return r; }
                 case jvm::JvmOpcode::Lreturn:
                 case jvm::JvmOpcode::Freturn:
@@ -348,7 +348,7 @@ Result<Value> JvmInterpreter::run(std::span<const uint8_t> code,
             frame.pc += d.length;
         }
 
-        return frame.stack.empty() ? Value{std::monostate{}} : frame.pop();
+        return frame.stack.empty() ? Value::uninit() : frame.pop();
     } catch (const std::exception& e) {
         return std::unexpected(make_error(ErrorKind::Internal,
             std::format("JVM interpreter error at pc={}: {}", frame.pc, e.what())));

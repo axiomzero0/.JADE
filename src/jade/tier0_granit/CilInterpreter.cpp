@@ -17,36 +17,36 @@ namespace jade::granit {
 namespace {
 
 [[nodiscard]] int32_t as_int32(const Value& v) {
-    if (std::holds_alternative<int32_t>(v)) return std::get<int32_t>(v);
-    if (std::holds_alternative<int64_t>(v)) return static_cast<int32_t>(std::get<int64_t>(v));
+    if (v.is_int32()) return v.as_int32();
+    if (v.is_int64()) return static_cast<int32_t>(v.as_int64());
     throw std::runtime_error("CIL: expected int32 on stack");
 }
 
 [[nodiscard]] int64_t as_int64(const Value& v) {
-    if (std::holds_alternative<int64_t>(v)) return std::get<int64_t>(v);
-    if (std::holds_alternative<int32_t>(v)) return std::get<int32_t>(v);
+    if (v.is_int64()) return v.as_int64();
+    if (v.is_int32()) return v.as_int32();
     throw std::runtime_error("CIL: expected int64 on stack");
 }
 
 [[nodiscard]] double as_float64(const Value& v) {
-    if (std::holds_alternative<double>(v)) return std::get<double>(v);
-    if (std::holds_alternative<float>(v)) return std::get<float>(v);
-    if (std::holds_alternative<int32_t>(v)) return static_cast<double>(std::get<int32_t>(v));
-    if (std::holds_alternative<int64_t>(v)) return static_cast<double>(std::get<int64_t>(v));
+    if (v.is_float()) return v.as_float();
+    if (v.is_float()) return v.as_float();
+    if (v.is_int32()) return static_cast<double>(v.as_int32());
+    if (v.is_int64()) return static_cast<double>(v.as_int64());
     throw std::runtime_error("CIL: expected float on stack");
 }
 
 [[nodiscard]] Value arith_add(CilFrame& frame) {
     Value b = frame.pop();
     Value a = frame.pop();
-    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b)) {
-        return Value{wrap_add_i32(std::get<int32_t>(a), std::get<int32_t>(b))};
+    if (a.is_int32() && b.is_int32()) {
+        return Value::from_int32(wrap_add_i32(a.as_int32(), b.as_int32()));
     }
-    if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b)) {
-        return Value{wrap_add_i64(std::get<int64_t>(a), std::get<int64_t>(b))};
+    if (a.is_int64() && b.is_int64()) {
+        return Value::from_int64(wrap_add_i64(a.as_int64(), b.as_int64()));
     }
-    if (std::holds_alternative<double>(a) || std::holds_alternative<double>(b)) {
-        return Value{as_float64(a) + as_float64(b)};
+    if (a.is_float() || b.is_float()) {
+        return Value::from_float(as_float64(a) + as_float64(b));
     }
     throw std::runtime_error("CIL add: invalid operand types");
 }
@@ -54,14 +54,14 @@ namespace {
 [[nodiscard]] Value arith_sub(CilFrame& frame) {
     Value b = frame.pop();
     Value a = frame.pop();
-    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b)) {
-        return Value{wrap_sub_i32(std::get<int32_t>(a), std::get<int32_t>(b))};
+    if (a.is_int32() && b.is_int32()) {
+        return Value::from_int32(wrap_sub_i32(a.as_int32(), b.as_int32()));
     }
-    if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b)) {
-        return Value{wrap_sub_i64(std::get<int64_t>(a), std::get<int64_t>(b))};
+    if (a.is_int64() && b.is_int64()) {
+        return Value::from_int64(wrap_sub_i64(a.as_int64(), b.as_int64()));
     }
-    if (std::holds_alternative<double>(a) || std::holds_alternative<double>(b)) {
-        return Value{as_float64(a) - as_float64(b)};
+    if (a.is_float() || b.is_float()) {
+        return Value::from_float(as_float64(a) - as_float64(b));
     }
     throw std::runtime_error("CIL sub: invalid operand types");
 }
@@ -69,14 +69,14 @@ namespace {
 [[nodiscard]] Value arith_mul(CilFrame& frame) {
     Value b = frame.pop();
     Value a = frame.pop();
-    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b)) {
-        return Value{wrap_mul_i32(std::get<int32_t>(a), std::get<int32_t>(b))};
+    if (a.is_int32() && b.is_int32()) {
+        return Value::from_int32(wrap_mul_i32(a.as_int32(), b.as_int32()));
     }
-    if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b)) {
-        return Value{wrap_mul_i64(std::get<int64_t>(a), std::get<int64_t>(b))};
+    if (a.is_int64() && b.is_int64()) {
+        return Value::from_int64(wrap_mul_i64(a.as_int64(), b.as_int64()));
     }
-    if (std::holds_alternative<double>(a) || std::holds_alternative<double>(b)) {
-        return Value{as_float64(a) * as_float64(b)};
+    if (a.is_float() || b.is_float()) {
+        return Value::from_float(as_float64(a) * as_float64(b));
     }
     throw std::runtime_error("CIL mul: invalid operand types");
 }
@@ -84,18 +84,18 @@ namespace {
 [[nodiscard]] Value arith_div(CilFrame& frame) {
     Value b = frame.pop();
     Value a = frame.pop();
-    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b)) {
-        const auto bv = std::get<int32_t>(b);
+    if (a.is_int32() && b.is_int32()) {
+        const auto bv = b.as_int32();
         if (bv == 0) throw std::runtime_error("DivideByZeroException");
-        return Value{std::get<int32_t>(a) / bv};
+        return Value::from_int32(a.as_int32() / bv);
     }
-    if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b)) {
-        const auto bv = std::get<int64_t>(b);
+    if (a.is_int64() && b.is_int64()) {
+        const auto bv = b.as_int64();
         if (bv == 0) throw std::runtime_error("DivideByZeroException");
-        return Value{std::get<int64_t>(a) / bv};
+        return Value::from_int64(a.as_int64() / bv);
     }
-    if (std::holds_alternative<double>(a) || std::holds_alternative<double>(b)) {
-        return Value{as_float64(a) / as_float64(b)};
+    if (a.is_float() || b.is_float()) {
+        return Value::from_float(as_float64(a) / as_float64(b));
     }
     throw std::runtime_error("CIL div: invalid operand types");
 }
@@ -142,23 +142,23 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
                     break;
 
                 // ── Constants ──
-                case cil::CilOpcode::LdI4_0:    frame.push(int32_t{0}); break;
-                case cil::CilOpcode::LdI4_1:    frame.push(int32_t{1}); break;
-                case cil::CilOpcode::LdI4_2:    frame.push(int32_t{2}); break;
-                case cil::CilOpcode::LdI4_3:    frame.push(int32_t{3}); break;
-                case cil::CilOpcode::LdI4_4:    frame.push(int32_t{4}); break;
-                case cil::CilOpcode::LdI4_5:    frame.push(int32_t{5}); break;
-                case cil::CilOpcode::LdI4_6:    frame.push(int32_t{6}); break;
-                case cil::CilOpcode::LdI4_7:    frame.push(int32_t{7}); break;
-                case cil::CilOpcode::LdI4_8:    frame.push(int32_t{8}); break;
-                case cil::CilOpcode::LdI4_M1:   frame.push(int32_t{-1}); break;
-                case cil::CilOpcode::LdI4_S:    frame.push(static_cast<int32_t>(d.operand_i32)); break;
-                case cil::CilOpcode::LdI4:      frame.push(static_cast<int32_t>(d.operand_i32)); break;
-                case cil::CilOpcode::LdI8:     frame.push(d.operand_i64); break;
-                case cil::CilOpcode::LdR4:      frame.push(static_cast<double>(d.operand_r4)); break;
-                case cil::CilOpcode::LdR8:      frame.push(d.operand_r8); break;
-                case cil::CilOpcode::LdNull:    frame.push(make_null_object()); break;
-                case cil::CilOpcode::LdStr:     frame.push(make_int32(static_cast<int32_t>(d.operand_u32))); break;
+                case cil::CilOpcode::LdI4_0:    frame.push(Value::from_int32(0)); break;
+                case cil::CilOpcode::LdI4_1:    frame.push(Value::from_int32(1)); break;
+                case cil::CilOpcode::LdI4_2:    frame.push(Value::from_int32(2)); break;
+                case cil::CilOpcode::LdI4_3:    frame.push(Value::from_int32(3)); break;
+                case cil::CilOpcode::LdI4_4:    frame.push(Value::from_int32(4)); break;
+                case cil::CilOpcode::LdI4_5:    frame.push(Value::from_int32(5)); break;
+                case cil::CilOpcode::LdI4_6:    frame.push(Value::from_int32(6)); break;
+                case cil::CilOpcode::LdI4_7:    frame.push(Value::from_int32(7)); break;
+                case cil::CilOpcode::LdI4_8:    frame.push(Value::from_int32(8)); break;
+                case cil::CilOpcode::LdI4_M1:   frame.push(Value::from_int32(-1)); break;
+                case cil::CilOpcode::LdI4_S:    frame.push(Value::from_int32(static_cast<int32_t>(d.operand_i32))); break;
+                case cil::CilOpcode::LdI4:      frame.push(Value::from_int32(static_cast<int32_t>(d.operand_i32))); break;
+                case cil::CilOpcode::LdI8:     frame.push(Value::from_int64(d.operand_i64)); break;
+                case cil::CilOpcode::LdR4:      frame.push(Value::from_float(static_cast<double>(d.operand_r4))); break;
+                case cil::CilOpcode::LdR8:      frame.push(Value::from_float(d.operand_r8)); break;
+                case cil::CilOpcode::LdNull:    frame.push(Value::null_value()); break;
+                case cil::CilOpcode::LdStr:     frame.push(Value::from_int32(static_cast<int32_t>(d.operand_u32))); break;
 
                 // ── Locals ──
                 case cil::CilOpcode::LdLoc_0:  frame.push(frame.locals[0]); break;
@@ -191,9 +191,9 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
                 case cil::CilOpcode::Div:  frame.push(arith_div(frame)); break;
                 case cil::CilOpcode::Neg: {
                     Value a = frame.pop();
-                    if (std::holds_alternative<int32_t>(a)) frame.push(Value{-std::get<int32_t>(a)});
-                    else if (std::holds_alternative<int64_t>(a)) frame.push(Value{-std::get<int64_t>(a)});
-                    else if (std::holds_alternative<double>(a)) frame.push(Value{-std::get<double>(a)});
+                    if (a.is_int32()) frame.push(Value::from_int32(-a.as_int32()));
+                    else if (a.is_int64()) frame.push(Value::from_int64(-a.as_int64()));
+                    else if (a.is_float()) frame.push(Value::from_float(-a.as_float()));
                     else throw std::runtime_error("CIL neg: invalid operand type");
                     break;
                 }
@@ -201,71 +201,71 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
                 // ── Bitwise ──
                 case cil::CilOpcode::And: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_int32(a) & as_int32(b)});
+                    frame.push(Value::from_int32(as_int32(a) & as_int32(b)));
                     break;
                 }
                 case cil::CilOpcode::Or: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_int32(a) | as_int32(b)});
+                    frame.push(Value::from_int32(as_int32(a) | as_int32(b)));
                     break;
                 }
                 case cil::CilOpcode::Xor: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_int32(a) ^ as_int32(b)});
+                    frame.push(Value::from_int32(as_int32(a) ^ as_int32(b)));
                     break;
                 }
                 case cil::CilOpcode::Not: {
                     Value a = frame.pop();
-                    frame.push(Value{~as_int32(a)});
+                    frame.push(Value::from_int32(~as_int32(a)));
                     break;
                 }
                 case cil::CilOpcode::Shl: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_int32(a) << (as_int32(b) & 31)});
+                    frame.push(Value::from_int32(as_int32(a) << (as_int32(b) & 31)));
                     break;
                 }
                 case cil::CilOpcode::Shr: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{as_int32(a) >> (as_int32(b) & 31)});
+                    frame.push(Value::from_int32(as_int32(a) >> (as_int32(b) & 31)));
                     break;
                 }
                 case cil::CilOpcode::Shr_Un: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    frame.push(Value{static_cast<int32_t>(static_cast<uint32_t>(as_int32(a)) >> (as_int32(b) & 31))});
+                    frame.push(Value::from_int32(static_cast<int32_t>(static_cast<uint32_t>(as_int32(a)) >> (as_int32(b) & 31))));
                     break;
                 }
 
                 // ── Conversions ──
                 case cil::CilOpcode::Conv_I1: {
-                    Value a = frame.pop(); frame.push(Value{static_cast<int32_t>(static_cast<int8_t>(as_int32(a)))});
+                    Value a = frame.pop(); frame.push(Value::from_int32(static_cast<int32_t>(static_cast<int8_t>(as_int32(a)))));
                     break;
                 }
                 case cil::CilOpcode::Conv_I2: {
-                    Value a = frame.pop(); frame.push(Value{static_cast<int32_t>(static_cast<int16_t>(as_int32(a)))});
+                    Value a = frame.pop(); frame.push(Value::from_int32(static_cast<int32_t>(static_cast<int16_t>(as_int32(a)))));
                     break;
                 }
                 case cil::CilOpcode::Conv_I4: {
-                    Value a = frame.pop(); frame.push(Value{as_int32(a)});
+                    Value a = frame.pop(); frame.push(Value::from_int32(as_int32(a)));
                     break;
                 }
                 case cil::CilOpcode::Conv_I8: {
-                    Value a = frame.pop(); frame.push(Value{as_int64(a)});
+                    Value a = frame.pop(); frame.push(Value::from_int64(as_int64(a)));
                     break;
                 }
                 case cil::CilOpcode::Conv_R4: {
-                    Value a = frame.pop(); frame.push(Value{as_float64(a)});
+                    Value a = frame.pop(); frame.push(Value::from_float(as_float64(a)));
                     break;
                 }
                 case cil::CilOpcode::Conv_R8: {
-                    Value a = frame.pop(); frame.push(Value{as_float64(a)});
+                    Value a = frame.pop(); frame.push(Value::from_float(as_float64(a)));
                     break;
                 }
                 case cil::CilOpcode::Conv_U4: {
-                    Value a = frame.pop(); frame.push(Value{static_cast<int32_t>(static_cast<uint32_t>(as_int32(a)))});
+                    Value a = frame.pop(); frame.push(Value::from_int32(static_cast<int32_t>(static_cast<uint32_t>(as_int32(a)))));
                     break;
                 }
                 case cil::CilOpcode::Conv_U8: {
-                    Value a = frame.pop(); frame.push(Value{static_cast<int64_t>(static_cast<uint64_t>(as_int64(a)))});
+                    Value a = frame.pop(); frame.push(Value::from_int64(static_cast<int64_t>(static_cast<uint64_t>(as_int64(a)))));
                     break;
                 }
 
@@ -275,36 +275,36 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
                     bool eq = value_equals(a, b);
                     if (!eq) {
                         // Try numeric comparison
-                        if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                            eq = std::get<int32_t>(a) == std::get<int32_t>(b);
-                        else if (std::holds_alternative<double>(a) && std::holds_alternative<double>(b))
-                            eq = std::get<double>(a) == std::get<double>(b);
+                        if (a.is_int32() && b.is_int32())
+                            eq = a.as_int32() == b.as_int32();
+                        else if (a.is_float() && b.is_float())
+                            eq = a.as_float() == b.as_float();
                     }
-                    frame.push(Value{eq ? int32_t{1} : int32_t{0}});
+                    frame.push(Value::from_int32(eq ? 1 : 0));
                     break;
                 }
                 case cil::CilOpcode::Cgt: {
                     Value b = frame.pop(); Value a = frame.pop();
                     bool gt = false;
-                    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                        gt = std::get<int32_t>(a) > std::get<int32_t>(b);
-                    else if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b))
-                        gt = std::get<int64_t>(a) > std::get<int64_t>(b);
+                    if (a.is_int32() && b.is_int32())
+                        gt = a.as_int32() > b.as_int32();
+                    else if (a.is_int64() && b.is_int64())
+                        gt = a.as_int64() > b.as_int64();
                     else
                         gt = as_float64(a) > as_float64(b);
-                    frame.push(Value{gt ? int32_t{1} : int32_t{0}});
+                    frame.push(Value::from_int32(gt ? 1 : 0));
                     break;
                 }
                 case cil::CilOpcode::Clt: {
                     Value b = frame.pop(); Value a = frame.pop();
                     bool lt = false;
-                    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                        lt = std::get<int32_t>(a) < std::get<int32_t>(b);
-                    else if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b))
-                        lt = std::get<int64_t>(a) < std::get<int64_t>(b);
+                    if (a.is_int32() && b.is_int32())
+                        lt = a.as_int32() < b.as_int32();
+                    else if (a.is_int64() && b.is_int64())
+                        lt = a.as_int64() < b.as_int64();
                     else
                         lt = as_float64(a) < as_float64(b);
-                    frame.push(Value{lt ? int32_t{1} : int32_t{0}});
+                    frame.push(Value::from_int32(lt ? 1 : 0));
                     break;
                 }
 
@@ -340,8 +340,8 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
                 case cil::CilOpcode::Beq_S:
                 case cil::CilOpcode::Beq: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    bool eq = (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                                  ? std::get<int32_t>(a) == std::get<int32_t>(b)
+                    bool eq = (a.is_int32() && b.is_int32())
+                                  ? a.as_int32() == b.as_int32()
                                   : as_float64(a) == as_float64(b);
                     if (eq) {
                         frame.pc = static_cast<uint32_t>(static_cast<int32_t>(frame.pc + d.length) + d.operand_i32);
@@ -353,8 +353,8 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
                 case cil::CilOpcode::Bne_Un_S:
                 case cil::CilOpcode::Bne_Un: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    bool eq = (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                                  ? std::get<int32_t>(a) == std::get<int32_t>(b)
+                    bool eq = (a.is_int32() && b.is_int32())
+                                  ? a.as_int32() == b.as_int32()
                                   : as_float64(a) == as_float64(b);
                     if (!eq) {
                         frame.pc = static_cast<uint32_t>(static_cast<int32_t>(frame.pc + d.length) + d.operand_i32);
@@ -366,8 +366,8 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
                 case cil::CilOpcode::Blt_S:
                 case cil::CilOpcode::Blt: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    bool lt = (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                                  ? std::get<int32_t>(a) < std::get<int32_t>(b)
+                    bool lt = (a.is_int32() && b.is_int32())
+                                  ? a.as_int32() < b.as_int32()
                                   : as_float64(a) < as_float64(b);
                     if (lt) {
                         frame.pc = static_cast<uint32_t>(static_cast<int32_t>(frame.pc + d.length) + d.operand_i32);
@@ -379,8 +379,8 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
                 case cil::CilOpcode::Bgt_S:
                 case cil::CilOpcode::Bgt: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    bool gt = (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                                  ? std::get<int32_t>(a) > std::get<int32_t>(b)
+                    bool gt = (a.is_int32() && b.is_int32())
+                                  ? a.as_int32() > b.as_int32()
                                   : as_float64(a) > as_float64(b);
                     if (gt) {
                         frame.pc = static_cast<uint32_t>(static_cast<int32_t>(frame.pc + d.length) + d.operand_i32);
@@ -392,8 +392,8 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
                 case cil::CilOpcode::Ble_S:
                 case cil::CilOpcode::Ble: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    bool le = (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                                  ? std::get<int32_t>(a) <= std::get<int32_t>(b)
+                    bool le = (a.is_int32() && b.is_int32())
+                                  ? a.as_int32() <= b.as_int32()
                                   : as_float64(a) <= as_float64(b);
                     if (le) {
                         frame.pc = static_cast<uint32_t>(static_cast<int32_t>(frame.pc + d.length) + d.operand_i32);
@@ -405,8 +405,8 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
                 case cil::CilOpcode::Bge_S:
                 case cil::CilOpcode::Bge: {
                     Value b = frame.pop(); Value a = frame.pop();
-                    bool ge = (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                                  ? std::get<int32_t>(a) >= std::get<int32_t>(b)
+                    bool ge = (a.is_int32() && b.is_int32())
+                                  ? a.as_int32() >= b.as_int32()
                                   : as_float64(a) >= as_float64(b);
                     if (ge) {
                         frame.pc = static_cast<uint32_t>(static_cast<int32_t>(frame.pc + d.length) + d.operand_i32);
@@ -418,7 +418,7 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
 
                 // ── Return ──
                 case cil::CilOpcode::Ret: {
-                    Value r = frame.eval_stack.empty() ? Value{std::monostate{}} : frame.pop();
+                    Value r = frame.eval_stack.empty() ? Value::uninit() : frame.pop();
                     poll_safepoint(frame);
                     return r;
                 }
@@ -433,7 +433,7 @@ Result<Value> CilInterpreter::run(std::span<const uint8_t> il_code,
         }
 
         // Fell off the end without Ret → return top of stack or null.
-        return frame.eval_stack.empty() ? Value{std::monostate{}} : frame.pop();
+        return frame.eval_stack.empty() ? Value::uninit() : frame.pop();
     } catch (const std::exception& e) {
         return std::unexpected(make_error(ErrorKind::Internal,
             std::format("CIL interpreter error at pc={}: {}", frame.pc, e.what())));

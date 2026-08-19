@@ -17,97 +17,81 @@ namespace jade::granit {
 namespace {
 
 [[nodiscard]] Value arith_add(Value a, Value b) {
-    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b)) {
-        return Value{wrap_add_i32(std::get<int32_t>(a), std::get<int32_t>(b))};
+    if (a.is_int32() && b.is_int32()) {
+        return Value::from_int32(wrap_add_i32(a.as_int32(), b.as_int32()));
     }
-    if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b)) {
-        return Value{wrap_add_i64(std::get<int64_t>(a), std::get<int64_t>(b))};
+    if (a.is_int64() && b.is_int64()) {
+        return Value::from_int64(wrap_add_i64(a.as_int64(), b.as_int64()));
     }
-    if (std::holds_alternative<double>(a) || std::holds_alternative<double>(b)) {
-        const double af = std::holds_alternative<int32_t>(a)
-                              ? static_cast<double>(std::get<int32_t>(a))
-                              : (std::holds_alternative<int64_t>(a)
-                                  ? static_cast<double>(std::get<int64_t>(a))
-                                  : std::get<double>(a));
-        const double bf = std::holds_alternative<int32_t>(b)
-                              ? static_cast<double>(std::get<int32_t>(b))
-                              : (std::holds_alternative<int64_t>(b)
-                                  ? static_cast<double>(std::get<int64_t>(b))
-                                  : std::get<double>(b));
-        return Value{af + bf};
+    if (a.is_float() || b.is_float()) {
+        const double af = a.is_int32() ? static_cast<double>(a.as_int32())
+                          : (a.is_int64() ? static_cast<double>(a.as_int64())
+                                          : a.as_float());
+        const double bf = b.is_int32() ? static_cast<double>(b.as_int32())
+                          : (b.is_int64() ? static_cast<double>(b.as_int64())
+                                          : b.as_float());
+        return Value::from_float(af + bf);
     }
     throw std::runtime_error("Add: invalid operand types");
 }
 
 [[nodiscard]] Value arith_sub(Value a, Value b) {
-    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b)) {
-        return Value{wrap_sub_i32(std::get<int32_t>(a), std::get<int32_t>(b))};
+    if (a.is_int32() && b.is_int32()) {
+        return Value::from_int32(wrap_sub_i32(a.as_int32(), b.as_int32()));
     }
-    if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b)) {
-        return Value{wrap_sub_i64(std::get<int64_t>(a), std::get<int64_t>(b))};
+    if (a.is_int64() && b.is_int64()) {
+        return Value::from_int64(wrap_sub_i64(a.as_int64(), b.as_int64()));
     }
-    if (std::holds_alternative<double>(a) || std::holds_alternative<double>(b)) {
-        const double af = std::holds_alternative<int32_t>(a)
-                              ? static_cast<double>(std::get<int32_t>(a))
-                              : (std::holds_alternative<int64_t>(a)
-                                  ? static_cast<double>(std::get<int64_t>(a))
-                                  : std::get<double>(a));
-        const double bf = std::holds_alternative<int32_t>(b)
-                              ? static_cast<double>(std::get<int32_t>(b))
-                              : (std::holds_alternative<int64_t>(b)
-                                  ? static_cast<double>(std::get<int64_t>(b))
-                                  : std::get<double>(b));
-        return Value{af - bf};
+    if (a.is_float() || b.is_float()) {
+        const double af = a.is_int32() ? static_cast<double>(a.as_int32())
+                          : (a.is_int64() ? static_cast<double>(a.as_int64())
+                                          : a.as_float());
+        const double bf = b.is_int32() ? static_cast<double>(b.as_int32())
+                          : (b.is_int64() ? static_cast<double>(b.as_int64())
+                                          : b.as_float());
+        return Value::from_float(af - bf);
     }
     throw std::runtime_error("Sub: invalid operand types");
 }
 
 [[nodiscard]] Value arith_mul(Value a, Value b) {
-    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b)) {
-        return Value{wrap_mul_i32(std::get<int32_t>(a), std::get<int32_t>(b))};
+    if (a.is_int32() && b.is_int32()) {
+        return Value::from_int32(wrap_mul_i32(a.as_int32(), b.as_int32()));
     }
-    if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b)) {
-        return Value{wrap_mul_i64(std::get<int64_t>(a), std::get<int64_t>(b))};
+    if (a.is_int64() && b.is_int64()) {
+        return Value::from_int64(wrap_mul_i64(a.as_int64(), b.as_int64()));
     }
-    if (std::holds_alternative<double>(a) || std::holds_alternative<double>(b)) {
-        const double af = std::holds_alternative<int32_t>(a)
-                              ? static_cast<double>(std::get<int32_t>(a))
-                              : (std::holds_alternative<int64_t>(a)
-                                  ? static_cast<double>(std::get<int64_t>(a))
-                                  : std::get<double>(a));
-        const double bf = std::holds_alternative<int32_t>(b)
-                              ? static_cast<double>(std::get<int32_t>(b))
-                              : (std::holds_alternative<int64_t>(b)
-                                  ? static_cast<double>(std::get<int64_t>(b))
-                                  : std::get<double>(b));
-        return Value{af * bf};
+    if (a.is_float() || b.is_float()) {
+        const double af = a.is_int32() ? static_cast<double>(a.as_int32())
+                          : (a.is_int64() ? static_cast<double>(a.as_int64())
+                                          : a.as_float());
+        const double bf = b.is_int32() ? static_cast<double>(b.as_int32())
+                          : (b.is_int64() ? static_cast<double>(b.as_int64())
+                                          : b.as_float());
+        return Value::from_float(af * bf);
     }
     throw std::runtime_error("Mul: invalid operand types");
 }
 
 [[nodiscard]] Value arith_div(Value a, Value b) {
-    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b)) {
-        const auto bv = std::get<int32_t>(b);
+    if (a.is_int32() && b.is_int32()) {
+        const auto bv = b.as_int32();
         if (bv == 0) throw std::runtime_error("DivideByZeroException");
-        return Value{std::get<int32_t>(a) / bv};
+        return Value::from_int32(a.as_int32() / bv);
     }
-    if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b)) {
-        const auto bv = std::get<int64_t>(b);
+    if (a.is_int64() && b.is_int64()) {
+        const auto bv = b.as_int64();
         if (bv == 0) throw std::runtime_error("DivideByZeroException");
-        return Value{std::get<int64_t>(a) / bv};
+        return Value::from_int64(a.as_int64() / bv);
     }
-    if (std::holds_alternative<double>(a) || std::holds_alternative<double>(b)) {
-        const double af = std::holds_alternative<int32_t>(a)
-                              ? static_cast<double>(std::get<int32_t>(a))
-                              : (std::holds_alternative<int64_t>(a)
-                                  ? static_cast<double>(std::get<int64_t>(a))
-                                  : std::get<double>(a));
-        const double bf = std::holds_alternative<int32_t>(b)
-                              ? static_cast<double>(std::get<int32_t>(b))
-                              : (std::holds_alternative<int64_t>(b)
-                                  ? static_cast<double>(std::get<int64_t>(b))
-                                  : std::get<double>(b));
-        return Value{af / bf};
+    if (a.is_float() || b.is_float()) {
+        const double af = a.is_int32() ? static_cast<double>(a.as_int32())
+                          : (a.is_int64() ? static_cast<double>(a.as_int64())
+                                          : a.as_float());
+        const double bf = b.is_int32() ? static_cast<double>(b.as_int32())
+                          : (b.is_int64() ? static_cast<double>(b.as_int64())
+                                          : b.as_float());
+        return Value::from_float(af / bf);
     }
     throw std::runtime_error("Div: invalid operand types");
 }
@@ -155,13 +139,13 @@ Result<Value> Interpreter::run(const Program& prog) {
             switch (instr.op) {
                 case Op::Nop:
                     break;
-                case Op::PushConst0:   push(int32_t{0}); break;
-                case Op::PushConst1:   push(int32_t{1}); break;
-                case Op::PushConstI:   push(static_cast<int32_t>(instr.imm)); break;
+                case Op::PushConst0:   push(Value::from_int32(0)); break;
+                case Op::PushConst1:   push(Value::from_int32(1)); break;
+                case Op::PushConstI:   push(Value::from_int32(static_cast<int32_t>(instr.imm))); break;
                 case Op::PushConstF: {
                     double v;
                     std::memcpy(&v, &instr.imm, sizeof(v));
-                    push(Value{v});
+                    push(Value::from_int32(v));
                     break;
                 }
                 case Op::PushConstN:   push(make_null_object()); break;
@@ -178,43 +162,43 @@ Result<Value> Interpreter::run(const Program& prog) {
                 case Op::Div: { Value b = pop(); Value a = pop(); push(arith_div(a, b)); break; }
                 case Op::Neg: {
                     Value a = pop();
-                    if (std::holds_alternative<int32_t>(a)) push(Value{-std::get<int32_t>(a)});
-                    else if (std::holds_alternative<int64_t>(a)) push(Value{-std::get<int64_t>(a)});
-                    else if (std::holds_alternative<double>(a)) push(Value{-std::get<double>(a)});
+                    if (a.is_int32()) push(Value::from_int32(-a.as_int32()));
+                    else if (a.is_int64()) push(Value::from_int32(-a.as_int64()));
+                    else if (a.is_float()) push(Value::from_int32(-a.as_float()));
                     else throw std::runtime_error("Neg: invalid operand type");
                     break;
                 }
-                case Op::Eq:  { Value b = pop(); Value a = pop(); push(Value{value_equals(a, b)}); break; }
-                case Op::Ne:  { Value b = pop(); Value a = pop(); push(Value{!value_equals(a, b)}); break; }
+                case Op::Eq:  { Value b = pop(); Value a = pop(); push(Value::from_int32(value_equals(a, b))); break; }
+                case Op::Ne:  { Value b = pop(); Value a = pop(); push(Value::from_int32(!value_equals(a, b))); break; }
                 case Op::Lt:  {
                     Value b = pop(); Value a = pop();
-                    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                        push(Value{std::get<int32_t>(a) < std::get<int32_t>(b)});
-                    else if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b))
-                        push(Value{std::get<int64_t>(a) < std::get<int64_t>(b)});
+                    if (a.is_int32() && b.is_int32())
+                        push(Value::from_int32(a.as_int32() < b.as_int32()));
+                    else if (a.is_int64() && b.is_int64())
+                        push(Value::from_int32(a.as_int64() < b.as_int64()));
                     else throw std::runtime_error("Lt: invalid operand types");
                     break;
                 }
                 case Op::Gt:  {
                     Value b = pop(); Value a = pop();
-                    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                        push(Value{std::get<int32_t>(a) > std::get<int32_t>(b)});
-                    else if (std::holds_alternative<int64_t>(a) && std::holds_alternative<int64_t>(b))
-                        push(Value{std::get<int64_t>(a) > std::get<int64_t>(b)});
+                    if (a.is_int32() && b.is_int32())
+                        push(Value::from_int32(a.as_int32() > b.as_int32()));
+                    else if (a.is_int64() && b.is_int64())
+                        push(Value::from_int32(a.as_int64() > b.as_int64()));
                     else throw std::runtime_error("Gt: invalid operand types");
                     break;
                 }
                 case Op::Le:  {
                     Value b = pop(); Value a = pop();
-                    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                        push(Value{std::get<int32_t>(a) <= std::get<int32_t>(b)});
+                    if (a.is_int32() && b.is_int32())
+                        push(Value::from_int32(a.as_int32() <= b.as_int32()));
                     else throw std::runtime_error("Le: invalid operand types");
                     break;
                 }
                 case Op::Ge:  {
                     Value b = pop(); Value a = pop();
-                    if (std::holds_alternative<int32_t>(a) && std::holds_alternative<int32_t>(b))
-                        push(Value{std::get<int32_t>(a) >= std::get<int32_t>(b)});
+                    if (a.is_int32() && b.is_int32())
+                        push(Value::from_int32(a.as_int32() >= b.as_int32()));
                     else throw std::runtime_error("Ge: invalid operand types");
                     break;
                 }
@@ -249,12 +233,12 @@ Result<Value> Interpreter::run(const Program& prog) {
                     poll_safepoint();
                     break;
                 case Op::Return: {
-                    Value r = stack_.empty() ? Value{std::monostate{}} : pop();
+                    Value r = stack_.empty() ? Value::uninit() : pop();
                     poll_safepoint();
                     return r;
                 }
                 case Op::Halt:
-                    return stack_.empty() ? Value{std::monostate{}} : pop();
+                    return stack_.empty() ? Value::uninit() : pop();
                 default:
                     return std::unexpected(make_error(
                         ErrorKind::UnsupportedNode,
@@ -262,7 +246,7 @@ Result<Value> Interpreter::run(const Program& prog) {
             }
             ++pc;
         }
-        return stack_.empty() ? Value{std::monostate{}} : pop();
+        return stack_.empty() ? Value::uninit() : pop();
     } catch (const std::exception& e) {
         return std::unexpected(make_error(ErrorKind::Internal, e.what()));
     }

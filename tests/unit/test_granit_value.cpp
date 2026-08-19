@@ -11,26 +11,26 @@ using namespace jade::granit;
 
 TEST(GranitValueTest, MakeInt32StoresValue) {
     Value v = make_int32(42);
-    ASSERT_TRUE(std::holds_alternative<int32_t>(v));
-    EXPECT_EQ(std::get<int32_t>(v), 42);
+    ASSERT_TRUE(v.is_int32());
+    EXPECT_EQ(v.as_int32(), 42);
 }
 
 TEST(GranitValueTest, MakeInt64StoresValue) {
     Value v = make_int64(0x123456789ABCDEF0LL);
-    ASSERT_TRUE(std::holds_alternative<int64_t>(v));
-    EXPECT_EQ(std::get<int64_t>(v), 0x123456789ABCDEF0LL);
+    ASSERT_TRUE(v.is_int64());
+    EXPECT_EQ(v.as_int64(), 0x123456789ABCDEF0LL);
 }
 
 TEST(GranitValueTest, MakeFloatStoresValue) {
     Value v = make_float(3.14);
-    ASSERT_TRUE(std::holds_alternative<double>(v));
-    EXPECT_DOUBLE_EQ(std::get<double>(v), 3.14);
+    ASSERT_TRUE(v.is_float());
+    EXPECT_DOUBLE_EQ(v.as_float(), 3.14);
 }
 
 TEST(GranitValueTest, MakeNullObjectStoresNullHandle) {
     Value v = make_null_object();
-    ASSERT_TRUE(std::holds_alternative<ObjectHandle>(v));
-    EXPECT_TRUE(std::get<ObjectHandle>(v).is_null());
+    ASSERT_TRUE(v.is_object());
+    EXPECT_TRUE(v.as_object().is_null());
 }
 
 TEST(GranitValueTest, ObjectHandleIndexAndGenerationSplitCorrectly) {
@@ -49,8 +49,7 @@ TEST(GranitValueTest, ObjectHandleNullIsValueZero) {
 TEST(GranitValueTest, ManagedPointerStoresBaseAndOffset) {
     ObjectHandle h{0x1234};
     ManagedPointer p{h, 16};
-    EXPECT_EQ(p.base, h);
-    EXPECT_EQ(p.offset, 16);
+    EXPECT_EQ(p.packed, (static_cast<uint64_t>(0x1234) << 32) | 16u);
 }
 
 TEST(GranitValueTest, EvalTypeOfMatchesVariantIndex) {

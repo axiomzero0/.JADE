@@ -15,7 +15,7 @@ TEST(InterpreterTest, PushConstAndReturn) {
     Interpreter interp;
     auto r = interp.run(b.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), 42);
+    EXPECT_EQ(r->as_int32(), 42);
 }
 
 TEST(InterpreterTest, AddTwoIntegers) {
@@ -27,7 +27,7 @@ TEST(InterpreterTest, AddTwoIntegers) {
     Interpreter interp;
     auto r = interp.run(b.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), 7);
+    EXPECT_EQ(r->as_int32(), 7);
 }
 
 TEST(InterpreterTest, SubtractTwoIntegers) {
@@ -39,7 +39,7 @@ TEST(InterpreterTest, SubtractTwoIntegers) {
     Interpreter interp;
     auto r = interp.run(b.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), 6);
+    EXPECT_EQ(r->as_int32(), 6);
 }
 
 TEST(InterpreterTest, MultiplyTwoIntegers) {
@@ -51,7 +51,7 @@ TEST(InterpreterTest, MultiplyTwoIntegers) {
     Interpreter interp;
     auto r = interp.run(b.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), 42);
+    EXPECT_EQ(r->as_int32(), 42);
 }
 
 TEST(InterpreterTest, DivideTwoIntegers) {
@@ -63,7 +63,7 @@ TEST(InterpreterTest, DivideTwoIntegers) {
     Interpreter interp;
     auto r = interp.run(b.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), 5);
+    EXPECT_EQ(r->as_int32(), 5);
 }
 
 TEST(InterpreterTest, DivideByZeroReturnsError) {
@@ -87,7 +87,7 @@ TEST(InterpreterTest, IntegerOverflowWrapsAround) {
     auto r = interp.run(b.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
     // 0x7FFFFFFF + 0x7FFFFFFF = 0xFFFFFFFE = -2 in int32 (two's complement wraparound)
-    EXPECT_EQ(std::get<int32_t>(*r), static_cast<int32_t>(-2));
+    EXPECT_EQ(r->as_int32(), static_cast<int32_t>(-2));
 }
 
 TEST(InterpreterTest, CompareLessThan) {
@@ -100,7 +100,7 @@ TEST(InterpreterTest, CompareLessThan) {
     auto r = interp.run(b.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
     // Boolean results are stored as int32_t in the new C# Value type.
-    EXPECT_EQ(std::get<int32_t>(*r), 1);
+    EXPECT_EQ(r->as_int32(), 1);
 }
 
 TEST(InterpreterTest, JumpIfTrueBranches) {
@@ -125,7 +125,7 @@ TEST(InterpreterTest, JumpIfTrueBranches) {
     Interpreter interp;
     auto r = interp.run(b2.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), 10);
+    EXPECT_EQ(r->as_int32(), 10);
     (void)b;
 }
 
@@ -139,7 +139,7 @@ TEST(InterpreterTest, FeedbackTracksBranchTaken) {
     Interpreter interp;
     auto r = interp.run(b.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), 42);
+    EXPECT_EQ(r->as_int32(), 42);
     // branch_total[1] should be 1, branch_taken[1] should be 1
     EXPECT_EQ(interp.feedback().branch_total[1], 1u);
     EXPECT_EQ(interp.feedback().branch_taken[1], 1u);
@@ -153,7 +153,7 @@ TEST(InterpreterTest, NegateInteger) {
     Interpreter interp;
     auto r = interp.run(b.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), -5);
+    EXPECT_EQ(r->as_int32(), -5);
 }
 
 TEST(InterpreterTest, DemoProgramComputes35) {
@@ -168,7 +168,7 @@ TEST(InterpreterTest, DemoProgramComputes35) {
     Interpreter interp;
     auto r = interp.run(b.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), 35);
+    EXPECT_EQ(r->as_int32(), 35);
 }
 
 TEST(InterpreterTest, MaxStackDepthTracked) {
@@ -191,5 +191,5 @@ TEST(InterpreterTest, HaltReturnsTopOfStack) {
     Interpreter interp;
     auto r = interp.run(b.build());
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_EQ(std::get<int32_t>(*r), 77);
+    EXPECT_EQ(r->as_int32(), 77);
 }
