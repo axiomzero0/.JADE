@@ -45,6 +45,7 @@ add_library(jade_core STATIC
     ir/passes/Peephole.cpp
     ir/passes/ProfileGuidedBlockReorder.cpp
     ir/passes/ICStubEmission.cpp
+    ir/passes/BuildRegions.cpp
     ir/passes/PassPipeline.cpp
 
     cil/Opcode.cpp
