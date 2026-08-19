@@ -41,6 +41,10 @@ add_library(jade_core STATIC
     ir/passes/Inlining.cpp
     ir/passes/TypeNarrowing.cpp
     ir/passes/TailCallElimination.cpp
+    ir/passes/LoopPeeling.cpp
+    ir/passes/Peephole.cpp
+    ir/passes/ProfileGuidedBlockReorder.cpp
+    ir/passes/ICStubEmission.cpp
     ir/passes/PassPipeline.cpp
 
     cil/Opcode.cpp
@@ -49,6 +53,9 @@ add_library(jade_core STATIC
     tier3_diamond/PEA.cpp
     tier3_diamond/SRA.cpp
     tier3_diamond/SLP.cpp
+    tier3_diamond/LoopUnrolling.cpp
+    tier3_diamond/LoopUnswitching.cpp
+    tier3_diamond/Devirtualization.cpp
 )
 jade_target_apply_hot_path_flags(jade_core)
 

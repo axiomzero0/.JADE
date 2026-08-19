@@ -17,15 +17,21 @@
 #include "jade/ir/passes/Inlining.hpp"
 #include "jade/ir/passes/TypeNarrowing.hpp"
 #include "jade/ir/passes/TailCallElimination.hpp"
+#include "jade/ir/passes/LoopPeeling.hpp"
+#include "jade/ir/passes/Peephole.hpp"
+#include "jade/ir/passes/ProfileGuidedBlockReorder.hpp"
+#include "jade/ir/passes/ICStubEmission.hpp"
 #include "jade/tier3_diamond/PEA.hpp"
 #include "jade/tier3_diamond/SRA.hpp"
 #include "jade/tier3_diamond/SLP.hpp"
+#include "jade/tier3_diamond/LoopUnrolling.hpp"
+#include "jade/tier3_diamond/LoopUnswitching.hpp"
+#include "jade/tier3_diamond/Devirtualization.hpp"
 
 namespace jade {
 
 std::unique_ptr<PassPipeline> build_ruby_pipeline() {
     auto pipe = std::make_unique<PassPipeline>();
-    // Order matters: cheap simplifications first, then expensive passes.
     pipe->add(std::make_unique<AlgebraicSimplificationPass>());
     pipe->add(std::make_unique<SCCPPass>());
     pipe->add(std::make_unique<ConstantFoldingPass>());
@@ -34,21 +40,27 @@ std::unique_ptr<PassPipeline> build_ruby_pipeline() {
     pipe->add(std::make_unique<ControlFlowSimplificationPass>());
     pipe->add(std::make_unique<TypeNarrowingPass>());
     pipe->add(std::make_unique<LICMPass>());
+    pipe->add(std::make_unique<LoopPeelingPass>());
     pipe->add(std::make_unique<BCEPass>());
     pipe->add(std::make_unique<NCEPass>());
     pipe->add(std::make_unique<EscapeAnalysisPass>());
     pipe->add(std::make_unique<InliningPass>());
     pipe->add(std::make_unique<TailCallEliminationPass>());
+    pipe->add(std::make_unique<ICStubEmissionPass>());
     pipe->add(std::make_unique<DeadCodeEliminationPass>());
+    pipe->add(std::make_unique<PeepholePass>());
     pipe->add(std::make_unique<GCMPass>());
+    pipe->add(std::make_unique<ProfileGuidedBlockReorderPass>());
     return pipe;
 }
 
 std::unique_ptr<PassPipeline> build_diamond_pipeline() {
     auto pipe = build_ruby_pipeline();
-    // DIAMOND-specific passes run after RUBY.
     pipe->add(std::make_unique<tier3::PEAPass>());
     pipe->add(std::make_unique<tier3::SRAPass>());
+    pipe->add(std::make_unique<tier3::LoopUnrollingPass>());
+    pipe->add(std::make_unique<tier3::LoopUnswitchingPass>());
+    pipe->add(std::make_unique<tier3::DevirtualizationPass>());
     pipe->add(std::make_unique<tier3::SLPPass>());
     pipe->add(std::make_unique<DeadCodeEliminationPass>());
     return pipe;

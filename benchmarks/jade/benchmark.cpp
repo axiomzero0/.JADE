@@ -186,13 +186,12 @@ int main(int argc, char** argv) {
     std::printf("Pipeline: Graph → RUBY (SCCP+ConstFold+CSE+GVN+DCE+...) → JADE JIT (LSRA + asmjit)\n\n");
 
     // Compile all benchmarks first (keeps JIT alive).
-    // Note: GVN benchmark is disabled — GVN marks duplicates dead but doesn't
-    // yet rewire uses, causing verifier failures. Fix tracked separately.
     std::vector<CompiledBench> benches;
     benches.push_back(bench_constant_folding());
     benches.push_back(bench_arithmetic_expr());
     benches.push_back(bench_chained_expr());
     benches.push_back(bench_dead_code());
+    benches.push_back(bench_gvn());
 
     // Run benchmarks.
     std::printf("%-20s %12s %12s %8s %12s %10s\n", "Benchmark", "Result", "Expected", "OK", "Avg ns/call", "Total ms");

@@ -93,14 +93,9 @@ Result<void> CSEPass::run(Graph& g, PassContext& /*ctx*/) {
         auto [it, inserted] = table.try_emplace(sig, id);
         if (inserted) continue;
 
-        // Duplicate found: mark this node dead. A subsequent pass (DCE)
-        // will sweep it. Note: we do NOT rewire uses here — that's the
-        // caller's job. Marking dead is sufficient for correctness because
-        // pure nodes with no live users are removable.
-        // However, we DO need to rewire uses to the surviving node.
-        // Since our Graph doesn't have a "replace_all_uses" yet, we mark
-        // the duplicate dead and rely on downstream DCE.
-        // (GVN does proper use rewiring; CSE is a lighter pass.)
+        // Duplicate found: rewire all uses of this node to point to the
+        // surviving node, then mark dead.
+        g.replace_all_uses(id, it->second);
         g.mark_dead(id);
         changed = true;
         (void)seen_effect_since_last_dedup;

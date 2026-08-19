@@ -82,7 +82,9 @@ Result<void> GVNPass::run(Graph& g, PassContext& /*ctx*/) {
         if (inserted) continue;
 
         // Duplicate found: replace this node with the existing one.
-        // We mark this node dead; DCE will sweep it later.
+        // Rewire all uses of this node to point to the surviving node,
+        // then mark this one dead. DCE will sweep it.
+        g.replace_all_uses(id, it->second);
         g.mark_dead(id);
         changed = true;
     }

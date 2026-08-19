@@ -104,6 +104,21 @@ void Graph::mark_dead(NodeId id) {
     node(id).flags |= NodeFlag::IsDead;
 }
 
+void Graph::replace_all_uses(NodeId old_id, NodeId new_id) {
+    for (std::size_t i = 0; i < nodes_.size(); ++i) {
+        Node& n = nodes_[i];
+        if (n.is_dead()) continue;
+        // Replace data inputs.
+        EdgeSlice s = n.data_inputs;
+        if (s.count > 0) {
+            auto inputs = edge_pool_.get_mut(s.first_edge, s.count);
+            for (NodeId& in : inputs) {
+                if (in == old_id) in = new_id;
+            }
+        }
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Debug printing
 // ─────────────────────────────────────────────────────────────────────────────

@@ -81,6 +81,11 @@ public:
     void set_frame_state(NodeId id, FrameStateId state);
     void mark_dead(NodeId id);
 
+    // Replace all data-input references to `old_id` with `new_id` across the
+    // entire graph. Used by GVN, CSE, SRA, PEA to rewire uses after dedup.
+    // Does NOT touch ctrl or effect inputs (those are structural).
+    void replace_all_uses(NodeId old_id, NodeId new_id);
+
     // ── Whole-graph queries ────────────────────────────────────────────────
     [[nodiscard]] std::size_t size() const noexcept { return nodes_.size(); }
     [[nodiscard]] NodeId start_node() const noexcept {

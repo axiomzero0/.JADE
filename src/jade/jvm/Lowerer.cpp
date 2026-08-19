@@ -358,7 +358,7 @@ Result<Graph> JvmLowerer::lower(std::span<const uint8_t> jvm_bytes,
                     break;
                 }
 
-                // ── Branches ──
+                // ── Branches — modeled as If + IfTrue/IfFalse ──
                 case JvmOpcode::Ifeq: case JvmOpcode::Ifne:
                 case JvmOpcode::Iflt: case JvmOpcode::Ifge:
                 case JvmOpcode::Ifgt: case JvmOpcode::Ifle: {
@@ -369,7 +369,15 @@ Result<Graph> JvmLowerer::lower(std::span<const uint8_t> jvm_bytes,
                     if (d.op == JvmOpcode::Ifeq || d.op == JvmOpcode::Ifne) k = NodeKind::Eq;
                     else if (d.op == JvmOpcode::Iflt || d.op == JvmOpcode::Ifge) k = NodeKind::Lt;
                     else k = NodeKind::Gt;
-                    push(g_.create(k, inputs));
+                    NodeId cmp = g_.create(k, inputs);
+                    // Emit If + IfTrue/IfFalse.
+                    NodeId if_node = b_.if_node(cmp);
+                    g_.set_ctrl_input(if_node, current_ctrl_);
+                    NodeId iftrue  = g_.create(NodeKind::IfTrue);
+                    g_.set_ctrl_input(iftrue, if_node);
+                    NodeId iffalse = g_.create(NodeKind::IfFalse);
+                    g_.set_ctrl_input(iffalse, if_node);
+                    current_ctrl_ = if_node;
                     break;
                 }
                 case JvmOpcode::IfIcmpeq: case JvmOpcode::IfIcmpne:
@@ -381,7 +389,14 @@ Result<Graph> JvmLowerer::lower(std::span<const uint8_t> jvm_bytes,
                     if (d.op == JvmOpcode::IfIcmpeq || d.op == JvmOpcode::IfIcmpne) k = NodeKind::Eq;
                     else if (d.op == JvmOpcode::IfIcmplt || d.op == JvmOpcode::IfIcmpge) k = NodeKind::Lt;
                     else k = NodeKind::Gt;
-                    push(g_.create(k, inputs));
+                    NodeId cmp = g_.create(k, inputs);
+                    NodeId if_node = b_.if_node(cmp);
+                    g_.set_ctrl_input(if_node, current_ctrl_);
+                    NodeId iftrue  = g_.create(NodeKind::IfTrue);
+                    g_.set_ctrl_input(iftrue, if_node);
+                    NodeId iffalse = g_.create(NodeKind::IfFalse);
+                    g_.set_ctrl_input(iffalse, if_node);
+                    current_ctrl_ = if_node;
                     break;
                 }
                 case JvmOpcode::IfAcmpeq: case JvmOpcode::IfAcmpne:
@@ -389,7 +404,14 @@ Result<Graph> JvmLowerer::lower(std::span<const uint8_t> jvm_bytes,
                     NodeId v = pop();
                     NodeId null_v = g_.create(NodeKind::LdNull);
                     NodeId inputs[] = {v, null_v};
-                    push(g_.create(NodeKind::Eq, inputs));
+                    NodeId cmp = g_.create(NodeKind::Eq, inputs);
+                    NodeId if_node = b_.if_node(cmp);
+                    g_.set_ctrl_input(if_node, current_ctrl_);
+                    NodeId iftrue  = g_.create(NodeKind::IfTrue);
+                    g_.set_ctrl_input(iftrue, if_node);
+                    NodeId iffalse = g_.create(NodeKind::IfFalse);
+                    g_.set_ctrl_input(iffalse, if_node);
+                    current_ctrl_ = if_node;
                     break;
                 }
                 case JvmOpcode::Goto:
