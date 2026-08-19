@@ -241,13 +241,15 @@ TEST(JadeJitTest, CompilesAndExecutesLargeConstant) {
 }
 
 TEST(JadeJitTest, FallbackOnUnsupportedNodeKind) {
-    // Use a node kind that Tier 1 doesn't yet lower (e.g., LdNull).
+    // Use a node kind that Tier 1 doesn't yet lower (e.g., ConvR4 — requires XMM).
     // The compile should fail with UnsupportedNode error.
     Graph g;
     GraphBuilder b(g);
     auto start = b.start();
-    auto n = g.create(NodeKind::LdNull);
-    auto ret = b.return_node(n);
+    auto i = b.const_int(42);
+    NodeId inputs[] = {i};
+    auto conv = g.create(NodeKind::ConvR4, inputs);
+    auto ret = b.return_node(conv);
     g.set_ctrl_input(ret, start);
     g.set_effect_input(ret, start);
 

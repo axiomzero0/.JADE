@@ -36,7 +36,7 @@ option(JADE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(JADE_ENABLE_SANITIZERS "Enable ASan/UBSan in debug builds" OFF)
 option(JADE_BUILD_TESTS "Build unit tests" ON)
 option(JADE_BUILD_BENCHMARKS "Build benchmarks" ON)
-option(JADE_USE_LTO "Enable link-time optimization in Release" OFF)
+option(JADE_USE_LTO "Enable link-time optimization in Release" ON)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Compiler flags

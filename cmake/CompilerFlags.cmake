@@ -90,3 +90,9 @@ if(JADE_USE_LTO AND CMAKE_BUILD_TYPE STREQUAL "Release")
         message(WARNING "LTO requested but not supported: ${lto_output}")
     endif()
 endif()
+
+# Add -march=native for the host binary (not for the JIT-emitted code).
+# The JIT code targets baseline x86-64; the host binary can use native.
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-mtune=native)
+endif()

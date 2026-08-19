@@ -104,9 +104,11 @@ using namespace asmjit;
 
 struct CodeEmitter::Impl {
     JitRuntime runtime;
-    // Map from NodeId to Label for block-target resolution.
-    // Used by If → IfTrue/IfFalse branch emission.
     std::unordered_map<uint32_t, Label> block_labels;
+    // Pending merge labels for if-then-else. When IfFalse is hit, we emit
+    // `jmp merge_label` and push merge_label. Before the epilogue, we bind
+    // all pending merge labels so fall-through works correctly.
+    std::vector<Label> pending_merge_labels;
 };
 
 CodeEmitter::CodeEmitter() : impl_(std::make_unique<Impl>()) {}
@@ -603,10 +605,6 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
             }
 
             case NodeKind::If: {
-                // If(cond) — emits a conditional branch to IfTrue or IfFalse.
-                // The targets are identified by the NodeId of the IfTrue/IfFalse
-                // nodes downstream. We scan the graph for IfTrue/IfFalse nodes
-                // that reference this If as their ctrl input.
                 auto inputs = graph.data_inputs(id);
                 if (inputs.size() != 1) {
                     return std::unexpected(make_error(ErrorKind::UnsupportedNode,
@@ -615,8 +613,6 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
                 const LiveInterval& iv_cond = alloc.intervals[inputs[0].value - 1];
                 x86::Gp cond_reg = load_value(a, iv_cond, x86::rax);
 
-                // Find the IfTrue and IfFalse nodes for this If.
-                // Each IfTrue/IfFalse has this If as its ctrl_input.
                 NodeId iftrue_target  = NodeId::invalid();
                 NodeId iffalse_target = NodeId::invalid();
                 for (std::size_t j = 0; j < graph.size(); ++j) {
@@ -631,13 +627,12 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
                     }
                 }
 
-                // Create labels for true and false branches.
-                // We'll bind them when we reach the corresponding IfTrue/IfFalse nodes.
                 Label true_label  = a.new_label();
                 Label false_label = a.new_label();
-                // Store the mapping so IfTrue/IfFalse can find their labels.
+                Label merge_label = a.new_label();
                 impl_->block_labels[iftrue_target.value]  = true_label;
                 impl_->block_labels[iffalse_target.value] = false_label;
+                impl_->pending_merge_labels.push_back(merge_label);
 
                 // test cond, cond; jne true_label; jmp false_label
                 a.test(cond_reg, cond_reg);
@@ -646,9 +641,21 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
                 break;
             }
 
-            case NodeKind::IfTrue:
+            case NodeKind::IfTrue: {
+                auto it = impl_->block_labels.find(id.value);
+                if (it != impl_->block_labels.end()) {
+                    a.bind(it->second);
+                    impl_->block_labels.erase(it);
+                }
+                break;
+            }
+
             case NodeKind::IfFalse: {
-                // Bind the label that was created by the corresponding If.
+                // End of true branch: jmp merge_label.
+                // Then bind false_label for the false branch.
+                if (!impl_->pending_merge_labels.empty()) {
+                    a.jmp(impl_->pending_merge_labels.back());
+                }
                 auto it = impl_->block_labels.find(id.value);
                 if (it != impl_->block_labels.end()) {
                     a.bind(it->second);
@@ -782,6 +789,113 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
                 break;
             }
 
+            // ── LdNull → mov reg, 0 ──
+            case NodeKind::LdNull:
+            case NodeKind::ConstNull: {
+                if (iv.assigned_reg) {
+                    a.xor_(to_asmjit_gpr(*iv.assigned_reg), to_asmjit_gpr(*iv.assigned_reg));
+                }
+                break;
+            }
+
+            // ── ConstBool → mov reg, 0/1 ──
+            case NodeKind::ConstBool: {
+                int64_t v = graph.side(id).const_value.b ? 1 : 0;
+                if (iv.assigned_reg) {
+                    a.mov(to_asmjit_gpr(*iv.assigned_reg), v);
+                }
+                break;
+            }
+
+            // ── Conversions (integer) ──
+            case NodeKind::ConvI1: {
+                auto inputs = graph.data_inputs(id);
+                if (inputs.size() != 1) break;
+                const LiveInterval& iv1 = alloc.intervals[inputs[0].value - 1];
+                x86::Gp src = load_value(a, iv1, x86::rax);
+                x86::Gp dst = iv.assigned_reg ? to_asmjit_gpr(*iv.assigned_reg) : x86::rax;
+                a.movsx(dst, src.r8());
+                if (iv.spill_slot) a.mov(x86::qword_ptr(x86::rbp, -static_cast<int32_t>(*iv.spill_slot)), dst);
+                break;
+            }
+            case NodeKind::ConvI2: {
+                auto inputs = graph.data_inputs(id);
+                if (inputs.size() != 1) break;
+                const LiveInterval& iv1 = alloc.intervals[inputs[0].value - 1];
+                x86::Gp src = load_value(a, iv1, x86::rax);
+                x86::Gp dst = iv.assigned_reg ? to_asmjit_gpr(*iv.assigned_reg) : x86::rax;
+                a.movsx(dst, src.r16());
+                if (iv.spill_slot) a.mov(x86::qword_ptr(x86::rbp, -static_cast<int32_t>(*iv.spill_slot)), dst);
+                break;
+            }
+            case NodeKind::ConvI4: {
+                auto inputs = graph.data_inputs(id);
+                if (inputs.size() != 1) break;
+                const LiveInterval& iv1 = alloc.intervals[inputs[0].value - 1];
+                x86::Gp src = load_value(a, iv1, x86::rax);
+                x86::Gp dst = iv.assigned_reg ? to_asmjit_gpr(*iv.assigned_reg) : x86::rax;
+                a.movsxd(dst, src.r32());
+                if (iv.spill_slot) a.mov(x86::qword_ptr(x86::rbp, -static_cast<int32_t>(*iv.spill_slot)), dst);
+                break;
+            }
+            case NodeKind::ConvI8: {
+                // No-op on 64-bit (already 64-bit).
+                break;
+            }
+            case NodeKind::ConvU1: {
+                auto inputs = graph.data_inputs(id);
+                if (inputs.size() != 1) break;
+                const LiveInterval& iv1 = alloc.intervals[inputs[0].value - 1];
+                x86::Gp src = load_value(a, iv1, x86::rax);
+                x86::Gp dst = iv.assigned_reg ? to_asmjit_gpr(*iv.assigned_reg) : x86::rax;
+                a.movzx(dst, src.r8());
+                if (iv.spill_slot) a.mov(x86::qword_ptr(x86::rbp, -static_cast<int32_t>(*iv.spill_slot)), dst);
+                break;
+            }
+            case NodeKind::ConvU2: {
+                auto inputs = graph.data_inputs(id);
+                if (inputs.size() != 1) break;
+                const LiveInterval& iv1 = alloc.intervals[inputs[0].value - 1];
+                x86::Gp src = load_value(a, iv1, x86::rax);
+                x86::Gp dst = iv.assigned_reg ? to_asmjit_gpr(*iv.assigned_reg) : x86::rax;
+                a.movzx(dst, src.r16());
+                if (iv.spill_slot) a.mov(x86::qword_ptr(x86::rbp, -static_cast<int32_t>(*iv.spill_slot)), dst);
+                break;
+            }
+            case NodeKind::ConvU4:
+            case NodeKind::ConvU8: {
+                auto inputs = graph.data_inputs(id);
+                if (inputs.size() != 1) break;
+                const LiveInterval& iv1 = alloc.intervals[inputs[0].value - 1];
+                x86::Gp src = load_value(a, iv1, x86::rax);
+                x86::Gp dst = iv.assigned_reg ? to_asmjit_gpr(*iv.assigned_reg) : x86::rax;
+                if (dst != src) a.mov(dst.r32(), src.r32());
+                if (iv.spill_slot) a.mov(x86::qword_ptr(x86::rbp, -static_cast<int32_t>(*iv.spill_slot)), dst);
+                break;
+            }
+
+            // ── ArrayLength → mov reg, [arr + 8] ──
+            case NodeKind::ArrayLength: {
+                auto inputs = graph.data_inputs(id);
+                if (inputs.size() != 1) break;
+                const LiveInterval& iv1 = alloc.intervals[inputs[0].value - 1];
+                x86::Gp arr = load_value(a, iv1, x86::rax);
+                x86::Gp dst = iv.assigned_reg ? to_asmjit_gpr(*iv.assigned_reg) : x86::rax;
+                a.mov(dst, x86::qword_ptr(arr, 8));
+                if (iv.spill_slot) a.mov(x86::qword_ptr(x86::rbp, -static_cast<int32_t>(*iv.spill_slot)), dst);
+                break;
+            }
+
+            // ── Float conversion → requires XMM reg support (planned) ──
+            case NodeKind::ConvR4:
+            case NodeKind::ConvR8:
+            case NodeKind::ConvI:
+            case NodeKind::ConvU:
+            case NodeKind::ConstFloat:
+                return std::unexpected(make_error(ErrorKind::UnsupportedNode,
+                    std::format("emit: float conversion requires XMM support; "
+                                "falling back to granit (node %{})", id.value)));
+
             default:
                 return std::unexpected(make_error(
                     ErrorKind::UnsupportedNode,
@@ -790,6 +904,12 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
                                 node_kind_name(n.kind), id.value)));
         }
     }
+
+    // Bind any pending merge labels (from if-then-else patterns).
+    for (auto& lbl : impl_->pending_merge_labels) {
+        a.bind(lbl);
+    }
+    impl_->pending_merge_labels.clear();
 
     // ── Epilogue ──────────────────────────────────────────────────────────
     a.bind(epilogue_label);
