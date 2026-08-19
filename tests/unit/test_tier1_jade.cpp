@@ -322,3 +322,364 @@ TEST(LinearScanRegAllocTest, DumpAllocationForInspection) {
     // Sanity check: the dump should be non-empty.
     EXPECT_FALSE(to_string(*r).empty());
 }
+
+// ── Extended emitter tests: Div, Mod, Neg, bitwise, shifts, comparisons ─────
+
+TEST(JadeJitTest, CompilesAndExecutesDiv) {
+    // 20 / 4 = 5
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(20);
+    auto c = b.const_int(4);
+    NodeId inputs[] = {a, c};
+    auto div = g.create(NodeKind::Div, inputs);
+    auto ret = b.return_node(div);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 5);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesMod) {
+    // 20 % 7 = 6
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(20);
+    auto c = b.const_int(7);
+    NodeId inputs[] = {a, c};
+    auto mod = g.create(NodeKind::Mod, inputs);
+    auto ret = b.return_node(mod);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 6);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesNeg) {
+    // -(5) = -5
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(5);
+    NodeId inputs[] = {a};
+    auto neg = g.create(NodeKind::Neg, inputs);
+    auto ret = b.return_node(neg);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), -5);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesBitwiseAnd) {
+    // 0xFF & 0x0F = 0x0F
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(0xFF);
+    auto c = b.const_int(0x0F);
+    NodeId inputs[] = {a, c};
+    auto and_node = g.create(NodeKind::And, inputs);
+    auto ret = b.return_node(and_node);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 0x0F);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesBitwiseOr) {
+    // 0xF0 | 0x0F = 0xFF
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(0xF0);
+    auto c = b.const_int(0x0F);
+    NodeId inputs[] = {a, c};
+    auto or_node = g.create(NodeKind::Or, inputs);
+    auto ret = b.return_node(or_node);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 0xFF);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesShl) {
+    // 1 << 4 = 16
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(1);
+    auto c = b.const_int(4);
+    NodeId inputs[] = {a, c};
+    auto shl = g.create(NodeKind::Shl, inputs);
+    auto ret = b.return_node(shl);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 16);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesShr) {
+    // 256 >> 4 = 16 (logical shift)
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(256);
+    auto c = b.const_int(4);
+    NodeId inputs[] = {a, c};
+    auto shr = g.create(NodeKind::Shr, inputs);
+    auto ret = b.return_node(shr);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 16);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesCmpEq) {
+    // 5 == 5 → 1
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(5);
+    auto c = b.const_int(5);
+    NodeId inputs[] = {a, c};
+    auto eq = g.create(NodeKind::Eq, inputs);
+    auto ret = b.return_node(eq);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 1);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesCmpLt) {
+    // 3 < 5 → 1
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(3);
+    auto c = b.const_int(5);
+    NodeId inputs[] = {a, c};
+    auto lt = g.create(NodeKind::Lt, inputs);
+    auto ret = b.return_node(lt);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 1);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesCmpGtFalse) {
+    // 3 > 5 → 0
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(3);
+    auto c = b.const_int(5);
+    NodeId inputs[] = {a, c};
+    auto gt = g.create(NodeKind::Gt, inputs);
+    auto ret = b.return_node(gt);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 0);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesLdLocStLocRoundTrip) {
+    // Store 42 to local 0, then load it back and return.
+    // We model locals by storing the local index in side_data::class_id.
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto val = b.const_int(42);
+    auto stloc = g.create(NodeKind::StLoc);
+    NodeId stloc_in[] = {val}; g.set_data_inputs(stloc, stloc_in);
+    g.set_effect_input(stloc, start);
+    g.side(stloc).class_id = 0;   // local 0
+
+    auto ldloc = g.create(NodeKind::LdLoc);
+    g.side(ldloc).class_id = 0;   // local 0
+
+    auto ret = b.return_node(ldloc);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 42);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesLdLocStLocMultiple) {
+    // Store 10 to local 0, store 20 to local 1, return local 1.
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto v10 = b.const_int(10);
+    auto v20 = b.const_int(20);
+    auto st0 = g.create(NodeKind::StLoc);
+    NodeId st0_in[] = {v10}; g.set_data_inputs(st0, st0_in);
+    g.set_effect_input(st0, start);
+    g.side(st0).class_id = 0;
+
+    auto st1 = g.create(NodeKind::StLoc);
+    NodeId st1_in[] = {v20}; g.set_data_inputs(st1, st1_in);
+    g.set_effect_input(st1, st0);  // effect chain
+    g.side(st1).class_id = 1;
+
+    auto ld1 = g.create(NodeKind::LdLoc);
+    g.side(ld1).class_id = 1;
+
+    auto ret = b.return_node(ld1);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, st1);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 20);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesSafepointNode) {
+    // A graph with a Safepoint node should compile and execute.
+    // The safepoint is a no-op (flag is always 0 in tests).
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto val = b.const_int(77);
+    auto sp = g.create(NodeKind::Safepoint);
+    g.set_effect_input(sp, start);
+    auto ret = b.return_node(val);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, sp);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 77);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesMixedArithmetic) {
+    // (10 + 20) - (3 * 4) = 30 - 12 = 18
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(10);
+    auto c = b.const_int(20);
+    auto add = b.add(a, c);          // 30
+    auto d = b.const_int(3);
+    auto e = b.const_int(4);
+    auto mul = b.mul(d, e);          // 12
+    NodeId sub_inputs[] = {add, mul};
+    auto sub = g.create(NodeKind::Sub, sub_inputs);  // 18
+    auto ret = b.return_node(sub);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 18);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesNot) {
+    // ~0 = -1 (all bits set)
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(0);
+    NodeId inputs[] = {a};
+    auto not_node = g.create(NodeKind::Not, inputs);
+    auto ret = b.return_node(not_node);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), -1);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesXor) {
+    // 0xFF ^ 0x0F = 0xF0
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(0xFF);
+    auto c = b.const_int(0x0F);
+    NodeId inputs[] = {a, c};
+    auto xor_node = g.create(NodeKind::Xor, inputs);
+    auto ret = b.return_node(xor_node);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 0xF0);
+}
+
+TEST(JadeJitTest, CompilesAndExecutesSar) {
+    // -16 >> 2 = -4 (arithmetic shift, preserves sign)
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(-16);
+    auto c = b.const_int(2);
+    NodeId inputs[] = {a, c};
+    auto sar = g.create(NodeKind::Sar, inputs);
+    auto ret = b.return_node(sar);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), -4);
+}

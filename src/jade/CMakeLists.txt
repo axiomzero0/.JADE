@@ -57,6 +57,8 @@ target_link_libraries(jade_granit PUBLIC jade_core)
 if(JADE_HAVE_ASMJIT)
     add_library(jade_tier1 STATIC
         tier1_jade/LinearScanRegAlloc.cpp
+        tier1_jade/FrameLayout.cpp
+        tier1_jade/SafepointEmitter.cpp
         tier1_jade/CodeEmitter.cpp
         tier1_jade/JadeJit.cpp
     )
