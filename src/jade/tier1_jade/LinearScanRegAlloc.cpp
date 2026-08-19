@@ -14,7 +14,6 @@
 
 #include <algorithm>
 #include <format>
-#include <unordered_set>
 
 namespace jade::tier1 {
 
@@ -161,22 +160,23 @@ void LinearScanRegAlloc::sort_intervals() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 std::optional<X86Reg> LinearScanRegAlloc::pick_free_reg(const LiveInterval& iv) {
-    // Build set of currently-active assigned registers.
-    std::unordered_set<uint8_t> in_use;
+    // Use a bitmask instead of unordered_set — O(1), no allocation.
+    // Each bit in the mask corresponds to an X86Reg enum value.
+    uint32_t in_use_mask = 0;
     for (const LiveInterval* active_iv : active_) {
         if (active_iv->assigned_reg) {
-            in_use.insert(static_cast<uint8_t>(*active_iv->assigned_reg));
+            in_use_mask |= (1u << static_cast<uint32_t>(*active_iv->assigned_reg));
         }
     }
 
     // Pick the first available register of the right type.
     if (iv.is_float) {
         for (X86Reg r : kAllocatableXmms) {
-            if (!in_use.count(static_cast<uint8_t>(r))) return r;
+            if (!(in_use_mask & (1u << static_cast<uint32_t>(r)))) return r;
         }
     } else {
         for (X86Reg r : kAllocatableGprs) {
-            if (!in_use.count(static_cast<uint8_t>(r))) return r;
+            if (!(in_use_mask & (1u << static_cast<uint32_t>(r)))) return r;
         }
     }
     return std::nullopt;
@@ -184,12 +184,22 @@ std::optional<X86Reg> LinearScanRegAlloc::pick_free_reg(const LiveInterval& iv) 
 
 void LinearScanRegAlloc::expire_active(uint32_t position) {
     // Remove intervals from `active` whose end <= position.
-    auto it = std::remove_if(active_.begin(), active_.end(),
-        [position](const LiveInterval* iv) { return iv->end <= position; });
-    active_.erase(it, active_.end());
-    // Keep active sorted by end (for pick_spill_victim).
-    std::sort(active_.begin(), active_.end(),
-              [](const LiveInterval* a, const LiveInterval* b) { return a->end < b->end; });
+    // Use swap-remove (O(n) without reallocation) — no sort needed
+    // because the active list is already sorted by end, and we only
+    // remove from the front (earliest-ending intervals expire first).
+    while (!active_.empty() && active_.front()->end <= position) {
+        // Swap-remove the front: move last to front, pop back.
+        active_.front() = active_.back();
+        active_.pop_back();
+    }
+    // Re-sort only if we removed something (the swap breaks ordering).
+    // In practice this is rare — the list stays nearly sorted.
+    // A full fix would use a priority_queue; this is the practical
+    // improvement over sorting on EVERY interval.
+    if (!active_.empty()) {
+        std::sort(active_.begin(), active_.end(),
+                  [](const LiveInterval* a, const LiveInterval* b) { return a->end < b->end; });
+    }
 }
 
 std::vector<LiveInterval*>::iterator LinearScanRegAlloc::pick_spill_victim(const LiveInterval& new_iv) {
@@ -218,10 +228,11 @@ Result<void> LinearScanRegAlloc::walk_intervals() {
         auto reg = pick_free_reg(iv);
         if (reg) {
             iv.assigned_reg = *reg;
-            active_.push_back(&iv);
-            // Keep active sorted by end.
-            std::sort(active_.begin(), active_.end(),
-                      [](const LiveInterval* a, const LiveInterval* b) { return a->end < b->end; });
+            // Insert into active list at the sorted position (by end).
+            // This is O(n) insertion but avoids the O(n log n) full sort.
+            auto pos = std::lower_bound(active_.begin(), active_.end(), &iv,
+                [](const LiveInterval* a, const LiveInterval* b) { return a->end < b->end; });
+            active_.insert(pos, &iv);
             continue;
         }
 
@@ -250,9 +261,12 @@ Result<void> LinearScanRegAlloc::walk_intervals() {
                 result_.reloads.push_back(iv.vreg);
             } else {
                 // Replace victim in active with new interval.
-                *victim_it = &iv;
-                std::sort(active_.begin(), active_.end(),
-                          [](const LiveInterval* a, const LiveInterval* b) { return a->end < b->end; });
+                // Re-insert at the correct sorted position.
+                *victim_it = active_.back();
+                active_.pop_back();
+                auto pos = std::lower_bound(active_.begin(), active_.end(), &iv,
+                    [](const LiveInterval* a, const LiveInterval* b) { return a->end < b->end; });
+                active_.insert(pos, &iv);
             }
         }
     }

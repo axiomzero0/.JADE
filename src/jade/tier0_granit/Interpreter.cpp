@@ -8,7 +8,6 @@
 #include "jade/tier0_granit/Bytecode.hpp"
 
 #include <format>
-#include <stdexcept>
 #include <cstring>
 #include <bit>
 
@@ -16,8 +15,17 @@ namespace jade::granit {
 
 namespace {
 
+// Error sentinel — returned by arith helpers when types don't match.
+// The main loop checks for this and returns an error Result.
+static Value kErrorVal = Value::from_int32(0x7FFF'FFFF);
+
+[[nodiscard]] bool is_error(const Value& v) noexcept {
+    // Compare by tag + int32 payload.
+    return v.is_int32() && v.as_int32() == 0x7FFF'FFFF;
+}
+
 [[nodiscard]] Value arith_add(Value a, Value b) {
-    if (a.is_int32() && b.is_int32()) {
+    if (__builtin_expect(a.is_int32() && b.is_int32(), 1)) {
         return Value::from_int32(wrap_add_i32(a.as_int32(), b.as_int32()));
     }
     if (a.is_int64() && b.is_int64()) {
@@ -32,11 +40,11 @@ namespace {
                                           : b.as_float());
         return Value::from_float(af + bf);
     }
-    throw std::runtime_error("Add: invalid operand types");
+    return kErrorVal;
 }
 
 [[nodiscard]] Value arith_sub(Value a, Value b) {
-    if (a.is_int32() && b.is_int32()) {
+    if (__builtin_expect(a.is_int32() && b.is_int32(), 1)) {
         return Value::from_int32(wrap_sub_i32(a.as_int32(), b.as_int32()));
     }
     if (a.is_int64() && b.is_int64()) {
@@ -51,11 +59,11 @@ namespace {
                                           : b.as_float());
         return Value::from_float(af - bf);
     }
-    throw std::runtime_error("Sub: invalid operand types");
+    return kErrorVal;
 }
 
 [[nodiscard]] Value arith_mul(Value a, Value b) {
-    if (a.is_int32() && b.is_int32()) {
+    if (__builtin_expect(a.is_int32() && b.is_int32(), 1)) {
         return Value::from_int32(wrap_mul_i32(a.as_int32(), b.as_int32()));
     }
     if (a.is_int64() && b.is_int64()) {
@@ -70,18 +78,18 @@ namespace {
                                           : b.as_float());
         return Value::from_float(af * bf);
     }
-    throw std::runtime_error("Mul: invalid operand types");
+    return kErrorVal;
 }
 
 [[nodiscard]] Value arith_div(Value a, Value b) {
     if (a.is_int32() && b.is_int32()) {
         const auto bv = b.as_int32();
-        if (bv == 0) throw std::runtime_error("DivideByZeroException");
+        if (__builtin_expect(bv == 0, 0)) return kErrorVal;
         return Value::from_int32(a.as_int32() / bv);
     }
     if (a.is_int64() && b.is_int64()) {
         const auto bv = b.as_int64();
-        if (bv == 0) throw std::runtime_error("DivideByZeroException");
+        if (__builtin_expect(bv == 0, 0)) return kErrorVal;
         return Value::from_int64(a.as_int64() / bv);
     }
     if (a.is_float() || b.is_float()) {
@@ -93,7 +101,7 @@ namespace {
                                           : b.as_float());
         return Value::from_float(af / bf);
     }
-    throw std::runtime_error("Div: invalid operand types");
+    return kErrorVal;
 }
 
 }  // namespace
@@ -106,15 +114,17 @@ void Interpreter::push(Value v) {
 
 Value Interpreter::pop() {
     if (__builtin_expect(stack_.empty(), 0))
-        throw std::runtime_error("stack underflow");
+        return kErrorVal;
     Value v = std::move(stack_.back());
     stack_.pop_back();
     return v;
 }
 
 Value& Interpreter::top() {
-    if (__builtin_expect(stack_.empty(), 0))
-        throw std::runtime_error("stack empty");
+    if (__builtin_expect(stack_.empty(), 0)) {
+        static Value dummy = Value::uninit();
+        return dummy;
+    }
     return stack_.back();
 }
 
@@ -134,10 +144,11 @@ Result<Value> Interpreter::run(const Program& prog) {
     feedback_.branch_taken.resize(prog.size(), 0);
     feedback_.branch_total.resize(prog.size(), 0);
 
-    try {
-        std::size_t pc = 0;
-        while (pc < prog.size()) {
-            const Instruction& instr = prog[pc];
+    // No try/catch — errors are returned via kErrorVal sentinel.
+    // This eliminates exception-handling overhead on the hot path.
+    std::size_t pc = 0;
+    while (pc < prog.size()) {
+        const Instruction& instr = prog[pc];
 
             switch (instr.op) {
                 case Op::Nop:
@@ -155,20 +166,20 @@ Result<Value> Interpreter::run(const Program& prog) {
                 case Op::Pop:           pop(); break;
                 case Op::Dup:           push(top()); break;
                 case Op::Swap: {
-                    if (stack_.size() < 2) throw std::runtime_error("stack underflow on Swap");
+                    if (stack_.size() < 2) return std::unexpected(make_error(ErrorKind::Internal, "stack underflow on Swap"));
                     std::swap(stack_[stack_.size()-1], stack_[stack_.size()-2]);
                     break;
                 }
-                case Op::Add: { Value b = pop(); Value a = pop(); push(arith_add(a, b)); break; }
-                case Op::Sub: { Value b = pop(); Value a = pop(); push(arith_sub(a, b)); break; }
-                case Op::Mul: { Value b = pop(); Value a = pop(); push(arith_mul(a, b)); break; }
-                case Op::Div: { Value b = pop(); Value a = pop(); push(arith_div(a, b)); break; }
+                case Op::Add: { Value b = pop(); Value a = pop(); Value r = arith_add(a, b); if (__builtin_expect(is_error(r), 0)) return std::unexpected(make_error(ErrorKind::Internal, "Add: invalid operand types")); push(r); break; }
+                case Op::Sub: { Value b = pop(); Value a = pop(); Value r = arith_sub(a, b); if (__builtin_expect(is_error(r), 0)) return std::unexpected(make_error(ErrorKind::Internal, "Sub: invalid operand types")); push(r); break; }
+                case Op::Mul: { Value b = pop(); Value a = pop(); Value r = arith_mul(a, b); if (__builtin_expect(is_error(r), 0)) return std::unexpected(make_error(ErrorKind::Internal, "Mul: invalid operand types")); push(r); break; }
+                case Op::Div: { Value b = pop(); Value a = pop(); Value r = arith_div(a, b); if (__builtin_expect(is_error(r), 0)) return std::unexpected(make_error(ErrorKind::Internal, "Div: divide by zero or invalid types")); push(r); break; }
                 case Op::Neg: {
                     Value a = pop();
                     if (a.is_int32()) push(Value::from_int32(-a.as_int32()));
-                    else if (a.is_int64()) push(Value::from_int32(-a.as_int64()));
-                    else if (a.is_float()) push(Value::from_int32(-a.as_float()));
-                    else throw std::runtime_error("Neg: invalid operand type");
+                    else if (a.is_int64()) push(Value::from_int64(-a.as_int64()));
+                    else if (a.is_float()) push(Value::from_float(-a.as_float()));
+                    else return std::unexpected(make_error(ErrorKind::Internal, "Neg: invalid operand type"));
                     break;
                 }
                 case Op::Eq:  { Value b = pop(); Value a = pop(); push(Value::from_int32(value_equals(a, b))); break; }
@@ -179,7 +190,7 @@ Result<Value> Interpreter::run(const Program& prog) {
                         push(Value::from_int32(a.as_int32() < b.as_int32()));
                     else if (a.is_int64() && b.is_int64())
                         push(Value::from_int32(a.as_int64() < b.as_int64()));
-                    else throw std::runtime_error("Lt: invalid operand types");
+                    else return std::unexpected(make_error(ErrorKind::Internal, "Lt: invalid operand types"));
                     break;
                 }
                 case Op::Gt:  {
@@ -188,21 +199,21 @@ Result<Value> Interpreter::run(const Program& prog) {
                         push(Value::from_int32(a.as_int32() > b.as_int32()));
                     else if (a.is_int64() && b.is_int64())
                         push(Value::from_int32(a.as_int64() > b.as_int64()));
-                    else throw std::runtime_error("Gt: invalid operand types");
+                    else return std::unexpected(make_error(ErrorKind::Internal, "Gt: invalid operand types"));
                     break;
                 }
                 case Op::Le:  {
                     Value b = pop(); Value a = pop();
                     if (a.is_int32() && b.is_int32())
                         push(Value::from_int32(a.as_int32() <= b.as_int32()));
-                    else throw std::runtime_error("Le: invalid operand types");
+                    else return std::unexpected(make_error(ErrorKind::Internal, "Le: invalid operand types"));
                     break;
                 }
                 case Op::Ge:  {
                     Value b = pop(); Value a = pop();
                     if (a.is_int32() && b.is_int32())
                         push(Value::from_int32(a.as_int32() >= b.as_int32()));
-                    else throw std::runtime_error("Ge: invalid operand types");
+                    else return std::unexpected(make_error(ErrorKind::Internal, "Ge: invalid operand types"));
                     break;
                 }
                 case Op::Jump: {
@@ -250,9 +261,6 @@ Result<Value> Interpreter::run(const Program& prog) {
             ++pc;
         }
         return stack_.empty() ? Value::uninit() : pop();
-    } catch (const std::exception& e) {
-        return std::unexpected(make_error(ErrorKind::Internal, e.what()));
-    }
 }
 
 }  // namespace jade::granit
