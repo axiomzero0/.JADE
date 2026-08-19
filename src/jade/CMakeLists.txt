@@ -29,6 +29,15 @@ add_library(jade_core STATIC
     ir/passes/ConstantFolding.cpp
     ir/passes/DeadCodeElimination.cpp
     ir/passes/GVN.cpp
+    ir/passes/SCCP.cpp
+    ir/passes/CSE.cpp
+    ir/passes/AlgebraicSimplification.cpp
+    ir/passes/ControlFlowSimplification.cpp
+    ir/passes/LICM.cpp
+    ir/passes/GCM.cpp
+    ir/passes/BCE.cpp
+    ir/passes/NCE.cpp
+    ir/passes/EscapeAnalysis.cpp
     ir/passes/PassPipeline.cpp
 
     cil/Opcode.cpp

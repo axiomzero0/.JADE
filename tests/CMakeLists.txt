@@ -21,6 +21,7 @@ add_executable(jade_unit_tests
     unit/test_tier0_granit_safepoint.cpp
     unit/test_runtime_epoch.cpp
     unit/test_tier1_jade.cpp
+    unit/test_tier2_ruby_passes.cpp
 )
 
 jade_target_apply_tooling_flags(jade_unit_tests)

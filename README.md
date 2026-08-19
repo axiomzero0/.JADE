@@ -149,12 +149,26 @@ The full doctrine lives in [`docs/`](docs/), with every file following the manda
 - ✅ Three optimization passes: `ConstantFolding`, `GVN`, `DCE` — all work on both CIL-lowered and JVM-lowered graphs
 - ✅ **Tier 1 JADE — real baseline SSA JIT with actual x86-64 code emission via asmjit**
   - `LinearScanRegAlloc` — Wimmer-Franz LSRA with spill/reload, active list management, spill-weight heuristic, 16-byte-aligned frame
-  - `CodeEmitter` — asmjit-based emitter supporting ConstInt/Add/Sub/Mul/Return; falls back to granit on any other NodeKind
+  - `FrameLayout` — stack frame layout manager (spill slots, locals, multi-arg calling convention)
+  - `CodeEmitter` — asmjit-based emitter supporting Start/ConstInt/LdLoc/StLoc/LdArg/Add/Sub/Mul/Div/Mod/Neg/And/Or/Xor/Not/Shl/Shr/Sar/Eq/Ne/Lt/Gt/Lte/Gte/LdFld/StFld/Return/Safepoint; falls back to granit on any other NodeKind
+  - `SafepointEmitter` — real `test byte [flag], 1; jne handler` poll sequence + cold-path handler
   - `JadeJit` — top-level driver with verifier + fallback-to-granit on any compilation failure
   - Tests **actually execute JIT-compiled machine code** (e.g., `(3+4)*5 = 35` is computed by x86-64 instructions emitted by asmjit)
+- ✅ **Tier 2 RUBY — 12 optimization passes implemented**
+  - `SCCP` — Sparse Conditional Constant Propagation (Wegman & Zadeck 1991)
+  - `CSE` — Common Subexpression Elimination (local, within effect-chain runs)
+  - `AlgebraicSimplification` — x+0→x, x*1→x, x*0→0, x&0→0, x|x→x, x^x→0, x<<0→x
+  - `ControlFlowSimplification` — eliminates constant-folded If branches
+  - `LICM` — Loop Invariant Code Motion (no-op on linear IR; ready for Loop regions)
+  - `GCM` — Global Code Motion (no-op on linear IR; ready for block structure)
+  - `BCE` — Bounds Check Elimination (proven 0 ≤ idx < len via constant analysis)
+  - `NCE` — Null Check Elimination (eliminates checks on NewObj/NewArr/Box/LdStr results)
+  - `EscapeAnalysis` — basic binary escape analysis; eliminates allocations with zero live uses
+  - `ConstantFolding` + `GVN` + `DCE` (pre-existing)
+  - Full RUBY pipeline: AlgebraicSimpl → SCCP → ConstFold → CSE → GVN → CFGSimp → LICM → BCE → NCE → EA → DCE → GCM
 - ✅ Documentation overhaul: 20 markdown files with mandatory YAML front-matter, including `ARCHITECTURE.md`, `PASS_LIST.md`, `DEOPT_PROTOCOL.md`, `BYTECODE_SPEC.md`, `TESTING_DOCTRINE.md`, `BENCHMARK_RECORD.md`, `passes/pea_specification.md`, `NO_STUBS_POLICY.md`, `STRICT_ERROR_HANDLING.md`
 - ✅ CI scripts: `tools/check_doc_headers.py`, `tools/update_benchmark_record.py`, `tools/check_no_stubs.py`
-- ✅ **No-stubs policy enforced** — 49 source files scanned, 0 stubs/TODOs/FIXMEs in critical paths
+- ✅ **No-stubs policy enforced** — 71 source files scanned, 0 stubs/TODOs/FIXMEs in critical paths
 
 ### In Progress
 - 🚧 Tier 2 `RUBY` — full SoN lowering + GCM + LICM + BCE for C# and Java patterns
