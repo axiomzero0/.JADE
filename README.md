@@ -128,62 +128,21 @@ The full doctrine lives in [`docs/`](docs/), with every file following the manda
 
 ## Implementation Status
 
-### Done
-- ✅ CMake build system with `-fno-exceptions -fno-rtti` on the JIT hot path (B.2, B.3)
-- ✅ `Arena` / `EdgePool` (Rule B.1)
-- ✅ `Result<T>` (= `std::expected<T, Error>`) (Rule B.2)
-- ✅ `NodeId`, `FrameStateId`, `ShapeId`, `StringId` — stable IDs (SoN Rule 2)
-- ✅ `Flags<E>` type-safe bitmask wrapper (Rule 51) with symbolic printing
-- ✅ `Node` value object (~32 bytes target) (SoN Rule 1)
-- ✅ `NodeKind` flat enum + metadata table, extended with C#-specific ops and Java-specific ops (`MonitorEnter`, `MonitorExit`, `InvokeDynamic`)
-- ✅ `TypeId` lattice (unified for C# and Java)
-- ✅ `Graph` with edge pool, side data, debug printer
-- ✅ `Verifier` (Rule 42) — 6 invariants checked
-- ✅ `EpochGC` — Epoch-Based Reclamation (Rule C.4)
-- ✅ `SafepointManager` — safepoint polling (Definition of Done #5)
-- ✅ Tier 0 `granit` interpreter with CLR/JVM-flavored `Value` type
-- ✅ **Full CIL bytecode module** (ECMA-335) — 256-entry opcode table, all operand formats
-- ✅ **Full JVM bytecode module** (JVMS §6.5) — all opcodes including `wide`, `tableswitch`/`lookupswitch`, `invokedynamic`, `multianewarray`
-- ✅ CIL → SoN IR lowering (`CilLowerer`)
-- ✅ JVM → SoN IR lowering (`JvmLowerer`)
-- ✅ Three optimization passes: `ConstantFolding`, `GVN`, `DCE` — all work on both CIL-lowered and JVM-lowered graphs
-- ✅ **Tier 1 JADE — real baseline SSA JIT with actual x86-64 code emission via asmjit**
-  - `LinearScanRegAlloc` — Wimmer-Franz LSRA with spill/reload, active list management, spill-weight heuristic, 16-byte-aligned frame
-  - `FrameLayout` — stack frame layout manager (spill slots, locals, multi-arg calling convention)
-  - `CodeEmitter` — asmjit-based emitter supporting Start/ConstInt/LdLoc/StLoc/LdArg/Add/Sub/Mul/Div/Mod/Neg/And/Or/Xor/Not/Shl/Shr/Sar/Eq/Ne/Lt/Gt/Lte/Gte/LdFld/StFld/Return/Safepoint; falls back to granit on any other NodeKind
-  - `SafepointEmitter` — real `test byte [flag], 1; jne handler` poll sequence + cold-path handler
-  - `JadeJit` — top-level driver with verifier + fallback-to-granit on any compilation failure
-  - Tests **actually execute JIT-compiled machine code** (e.g., `(3+4)*5 = 35` is computed by x86-64 instructions emitted by asmjit)
-- ✅ **Tier 2 RUBY — 12 optimization passes implemented**
-  - `SCCP` — Sparse Conditional Constant Propagation (Wegman & Zadeck 1991)
-  - `CSE` — Common Subexpression Elimination (local, within effect-chain runs)
-  - `AlgebraicSimplification` — x+0→x, x*1→x, x*0→0, x&0→0, x|x→x, x^x→0, x<<0→x
-  - `ControlFlowSimplification` — eliminates constant-folded If branches
-  - `LICM` — Loop Invariant Code Motion (no-op on linear IR; ready for Loop regions)
-  - `GCM` — Global Code Motion (no-op on linear IR; ready for block structure)
-  - `BCE` — Bounds Check Elimination (proven 0 ≤ idx < len via constant analysis)
-  - `NCE` — Null Check Elimination (eliminates checks on NewObj/NewArr/Box/LdStr results)
-  - `EscapeAnalysis` — basic binary escape analysis; eliminates allocations with zero live uses
-  - `ConstantFolding` + `GVN` + `DCE` (pre-existing)
-  - Full RUBY pipeline: AlgebraicSimpl → SCCP → ConstFold → CSE → GVN → CFGSimp → LICM → BCE → NCE → EA → DCE → GCM
-- ✅ Documentation overhaul: 20 markdown files with mandatory YAML front-matter, including `ARCHITECTURE.md`, `PASS_LIST.md`, `DEOPT_PROTOCOL.md`, `BYTECODE_SPEC.md`, `TESTING_DOCTRINE.md`, `BENCHMARK_RECORD.md`, `passes/pea_specification.md`, `NO_STUBS_POLICY.md`, `STRICT_ERROR_HANDLING.md`
-- ✅ CI scripts: `tools/check_doc_headers.py`, `tools/update_benchmark_record.py`, `tools/check_no_stubs.py`
-- ✅ **No-stubs policy enforced** — 71 source files scanned, 0 stubs/TODOs/FIXMEs in critical paths
 
 ### In Progress
-- 🚧 Tier 2 `RUBY` — full SoN lowering + GCM + LICM + BCE for C# and Java patterns
-- 🚧 Real CIL interpreter in `granit` — executing decoded CIL bytecode
-- 🚧 Real JVM interpreter in `granit` — executing decoded JVM bytecode
-- 🚧 Tier 1 expansion: support for `LdLoc`/`StLoc`/`LdArg`/`Call`/`LdFld` nodes; multi-arg calling convention
+-  Tier 2 `RUBY` full SoN lowering + GCM + LICM + BCE for C# and Java patterns
+-  Real CIL interpreter in `granit` — executing decoded CIL bytecode
+-  Real JVM interpreter in `granit` — executing decoded JVM bytecode
+-  Tier 1 expansion: support for `LdLoc`/`StLoc`/`LdArg`/`Call`/`LdFld` nodes; multi-arg calling convention
 
 ### TODO
-- ⬜ Tier 3 `DIAMOND` — PEA, SRA, SLP vectorization for `Vector<T>` (C#) and `jdk.incubator.vector` (Java)
-- ⬜ `enkiTS` integration for the compiler pool (Definition of Done #6)
-- ⬜ PE file / metadata table parsing (`#~`, `#Strings`, `#US` heaps) for C#
-- ⬜ JAR/`.class` file parsing for Java
-- ⬜ Golden IR test suite (Rule 37) — ≥10 per pass
-- ⬜ Differential testing against .NET CLR (C#) and OpenJDK (Java) (Rule 38)
-- ⬜ Macro-benchmark suite (`benchmarks/csharp/`, `benchmarks/java/`)
+-  Tier 3 `DIAMOND` — PEA, SRA, SLP vectorization for `Vector<T>` (C#) and `jdk.incubator.vector` (Java)
+-  `enkiTS` integration for the compiler pool (Definition of Done #6)
+-  PE file / metadata table parsing (`#~`, `#Strings`, `#US` heaps) for C#
+-  JAR/`.class` file parsing for Java
+-  Golden IR test suite (Rule 37) — ≥10 per pass
+-  Differential testing against .NET CLR (C#) and OpenJDK (Java) (Rule 38)
+- Macro-benchmark suite (`benchmarks/csharp/`, `benchmarks/java/`)
 
 ## License
 
