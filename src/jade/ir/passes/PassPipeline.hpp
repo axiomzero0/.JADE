@@ -32,4 +32,8 @@ private:
 // Build the standard Tier 2 (RUBY) pipeline.
 [[nodiscard]] std::unique_ptr<PassPipeline> build_ruby_pipeline();
 
+// Build the standard Tier 3 (DIAMOND) pipeline. Includes all RUBY passes
+// plus PEA, SRA, SLP.
+[[nodiscard]] std::unique_ptr<PassPipeline> build_diamond_pipeline();
+
 }  // namespace jade

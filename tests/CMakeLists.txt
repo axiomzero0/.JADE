@@ -22,6 +22,9 @@ add_executable(jade_unit_tests
     unit/test_runtime_epoch.cpp
     unit/test_tier1_jade.cpp
     unit/test_tier2_ruby_passes.cpp
+    unit/test_tier3_diamond.cpp
+    unit/test_granit_cil_interpreter.cpp
+    unit/test_granit_jvm_interpreter.cpp
 )
 
 jade_target_apply_tooling_flags(jade_unit_tests)

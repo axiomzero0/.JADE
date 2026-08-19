@@ -14,6 +14,12 @@
 #include "jade/ir/passes/BCE.hpp"
 #include "jade/ir/passes/NCE.hpp"
 #include "jade/ir/passes/EscapeAnalysis.hpp"
+#include "jade/ir/passes/Inlining.hpp"
+#include "jade/ir/passes/TypeNarrowing.hpp"
+#include "jade/ir/passes/TailCallElimination.hpp"
+#include "jade/tier3_diamond/PEA.hpp"
+#include "jade/tier3_diamond/SRA.hpp"
+#include "jade/tier3_diamond/SLP.hpp"
 
 namespace jade {
 
@@ -26,12 +32,25 @@ std::unique_ptr<PassPipeline> build_ruby_pipeline() {
     pipe->add(std::make_unique<CSEPass>());
     pipe->add(std::make_unique<GVNPass>());
     pipe->add(std::make_unique<ControlFlowSimplificationPass>());
+    pipe->add(std::make_unique<TypeNarrowingPass>());
     pipe->add(std::make_unique<LICMPass>());
     pipe->add(std::make_unique<BCEPass>());
     pipe->add(std::make_unique<NCEPass>());
     pipe->add(std::make_unique<EscapeAnalysisPass>());
+    pipe->add(std::make_unique<InliningPass>());
+    pipe->add(std::make_unique<TailCallEliminationPass>());
     pipe->add(std::make_unique<DeadCodeEliminationPass>());
     pipe->add(std::make_unique<GCMPass>());
+    return pipe;
+}
+
+std::unique_ptr<PassPipeline> build_diamond_pipeline() {
+    auto pipe = build_ruby_pipeline();
+    // DIAMOND-specific passes run after RUBY.
+    pipe->add(std::make_unique<tier3::PEAPass>());
+    pipe->add(std::make_unique<tier3::SRAPass>());
+    pipe->add(std::make_unique<tier3::SLPPass>());
+    pipe->add(std::make_unique<DeadCodeEliminationPass>());
     return pipe;
 }
 

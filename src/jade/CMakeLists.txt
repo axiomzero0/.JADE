@@ -38,10 +38,17 @@ add_library(jade_core STATIC
     ir/passes/BCE.cpp
     ir/passes/NCE.cpp
     ir/passes/EscapeAnalysis.cpp
+    ir/passes/Inlining.cpp
+    ir/passes/TypeNarrowing.cpp
+    ir/passes/TailCallElimination.cpp
     ir/passes/PassPipeline.cpp
 
     cil/Opcode.cpp
     jvm/Opcode.cpp
+
+    tier3_diamond/PEA.cpp
+    tier3_diamond/SRA.cpp
+    tier3_diamond/SLP.cpp
 )
 jade_target_apply_hot_path_flags(jade_core)
 
@@ -52,6 +59,8 @@ add_library(jade_granit STATIC
     tier0_granit/Bytecode.cpp
     tier0_granit/Value.cpp
     tier0_granit/Interpreter.cpp
+    tier0_granit/CilInterpreter.cpp
+    tier0_granit/JvmInterpreter.cpp
     cil/Lowerer.cpp
     jvm/Lowerer.cpp
 )
