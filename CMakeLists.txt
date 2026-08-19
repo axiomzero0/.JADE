@@ -35,7 +35,7 @@ enable_testing()
 option(JADE_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(JADE_ENABLE_SANITIZERS "Enable ASan/UBSan in debug builds" OFF)
 option(JADE_BUILD_TESTS "Build unit tests" ON)
-option(JADE_BUILD_BENCHMARKS "Build benchmarks" OFF)
+option(JADE_BUILD_BENCHMARKS "Build benchmarks" ON)
 option(JADE_USE_LTO "Enable link-time optimization in Release" OFF)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -49,7 +49,6 @@ include(${CMAKE_SOURCE_DIR}/cmake/CompilerFlags.cmake)
 add_subdirectory(src/jade)
 
 if(JADE_BUILD_TESTS)
-    # GoogleTest via FetchContent — needed for Rule 37 (golden tests)
     include(FetchContent)
     FetchContent_Declare(
         googletest
@@ -57,10 +56,22 @@ if(JADE_BUILD_TESTS)
         GIT_TAG        v1.15.2
         GIT_SHALLOW    TRUE
     )
-    # Windows compat; harmless on Linux
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
     add_subdirectory(tests)
+endif()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Benchmarks
+# ─────────────────────────────────────────────────────────────────────────────
+if(JADE_BUILD_BENCHMARKS)
+    add_executable(jade_bench benchmarks/jade/benchmark.cpp)
+    jade_target_apply_tooling_flags(jade_bench)
+    target_link_libraries(jade_bench PRIVATE jade_core jade_granit)
+    if(TARGET jade_tier1)
+        target_link_libraries(jade_bench PRIVATE jade_tier1)
+        target_compile_definitions(jade_bench PRIVATE JADE_HAVE_ASMJIT=1)
+    endif()
 endif()
 
 # ─────────────────────────────────────────────────────────────────────────────

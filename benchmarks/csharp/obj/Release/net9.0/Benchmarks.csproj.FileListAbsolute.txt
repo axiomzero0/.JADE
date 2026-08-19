@@ -1,0 +1,15 @@
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/Benchmarks.GeneratedMSBuildEditorConfig.editorconfig
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/Benchmarks.AssemblyInfoInputs.cache
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/Benchmarks.AssemblyInfo.cs
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/Benchmarks.csproj.CoreCompileInputs.cache
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/Benchmarks.sourcelink.json
+/home/z/my-project/.JADE/benchmarks/csharp/bin/Release/net9.0/Benchmarks
+/home/z/my-project/.JADE/benchmarks/csharp/bin/Release/net9.0/Benchmarks.deps.json
+/home/z/my-project/.JADE/benchmarks/csharp/bin/Release/net9.0/Benchmarks.runtimeconfig.json
+/home/z/my-project/.JADE/benchmarks/csharp/bin/Release/net9.0/Benchmarks.dll
+/home/z/my-project/.JADE/benchmarks/csharp/bin/Release/net9.0/Benchmarks.pdb
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/Benchmarks.dll
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/refint/Benchmarks.dll
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/Benchmarks.pdb
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/Benchmarks.genruntimeconfig.cache
+/home/z/my-project/.JADE/benchmarks/csharp/obj/Release/net9.0/ref/Benchmarks.dll
