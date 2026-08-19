@@ -84,6 +84,19 @@ if(JADE_BUILD_BENCHMARKS)
     if(TARGET asmjit::asmjit)
         target_link_libraries(jade_loop_bench PRIVATE asmjit::asmjit)
     endif()
+
+    # Microbenchmark suite: tests specific optimizations.
+    add_executable(jade_micro_bench benchmarks/micro/micro_bench.cpp)
+    jade_target_apply_tooling_flags(jade_micro_bench)
+    target_include_directories(jade_micro_bench PRIVATE benchmarks)
+    target_link_libraries(jade_micro_bench PRIVATE jade_core jade_granit)
+    if(TARGET jade_tier1)
+        target_link_libraries(jade_micro_bench PRIVATE jade_tier1)
+        target_compile_definitions(jade_micro_bench PRIVATE JADE_HAVE_ASMJIT=1)
+    endif()
+    if(TARGET asmjit::asmjit)
+        target_link_libraries(jade_micro_bench PRIVATE asmjit::asmjit)
+    endif()
 endif()
 
 # ─────────────────────────────────────────────────────────────────────────────
