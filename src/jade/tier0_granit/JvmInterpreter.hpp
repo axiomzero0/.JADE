@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: MIT
 // .JADE Compiler — tier0_granit/JvmInterpreter.hpp
 //
-// Real JVM bytecode interpreter for Tier 0 (granit).
-//
-// Executes decoded JVM opcodes (from src/jade/jvm/Opcode.hpp) on a typed
-// evaluation stack. This is NOT the legacy Op-enum interpreter — it consumes
-// real JVMS §6.5 byte streams.
+// Real JVM bytecode interpreter — exception-free hot path.
+// Uses fixed-capacity eval stack (no vector realloc).
 
 #pragma once
 
@@ -14,29 +11,42 @@
 #include "jade/tier0_granit/Value.hpp"
 #include "jade/runtime/Safepoint.hpp"
 
-#include <vector>
+#include <array>
 #include <span>
 #include <cstdint>
+#include <vector>
 
 namespace jade::granit {
+
+constexpr std::size_t kMaxJvmStack = 256;
 
 struct JvmFrame {
     std::span<const uint8_t> code;
     uint32_t pc = 0;
-    std::vector<Value> stack;
+    std::array<Value, kMaxJvmStack> stack;
+    int32_t sp = 0;
     std::vector<Value> locals;
 
-    void push(Value v) { stack.push_back(std::move(v)); }
+    bool error = false;
+    const char* error_msg = nullptr;
+
+    void push(Value v) {
+        if (__builtin_expect(sp < static_cast<int32_t>(kMaxJvmStack), 1))
+            stack[sp++] = std::move(v);
+        else { error = true; error_msg = "JVM: stack overflow"; }
+    }
     [[nodiscard]] Value pop() {
-        if (stack.empty()) throw std::runtime_error("JVM: stack underflow");
-        Value v = std::move(stack.back());
-        stack.pop_back();
-        return v;
+        if (__builtin_expect(sp > 0, 1)) return std::move(stack[--sp]);
+        error = true; error_msg = "JVM: stack underflow";
+        return Value::uninit();
     }
     [[nodiscard]] Value& top() {
-        if (stack.empty()) throw std::runtime_error("JVM: stack empty");
-        return stack.back();
+        if (__builtin_expect(sp > 0, 1)) return stack[sp - 1];
+        static Value dummy = Value::uninit();
+        error = true; error_msg = "JVM: stack empty";
+        return dummy;
     }
+    [[nodiscard]] bool has_error() const noexcept { return error; }
 };
 
 class JvmInterpreter {
