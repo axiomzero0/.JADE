@@ -104,7 +104,10 @@ TEST(DCETest, RemovesUnusedPureNode) {
     EXPECT_TRUE(g.node(add).is_dead());
 }
 
-TEST(DCETest, KeepsEffectfulNodeWithNoDataUses) {
+TEST(DCETest, RemovesEffectfulNodeWithNoUses) {
+    // An Allocate with zero uses has no observable side effect — DCE
+    // removes it. (The old behavior kept ALL effectful nodes, which was
+    // too conservative and prevented PEA cleanup.)
     Graph g;
     GraphBuilder b(g);
     auto start = b.start();
@@ -114,7 +117,8 @@ TEST(DCETest, KeepsEffectfulNodeWithNoDataUses) {
     PassContext ctx;
     auto r = pass.run(g, ctx);
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_FALSE(g.node(alloc).is_dead());
+    EXPECT_TRUE(g.node(alloc).is_dead())
+        << "Allocate with zero uses must be DCE'd (no observable side effect)";
 }
 
 TEST(DCETest, KeepsNodeUsedByAnother) {

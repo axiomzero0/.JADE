@@ -61,7 +61,10 @@ TEST(PEAMaterializeTest, NoEscapeAllocationEliminated) {
 
 // ── GlobalEscape: allocation kept ──
 
-TEST(PEAMaterializeTest, GlobalEscapeAllocationKept) {
+TEST(PEAMaterializeTest, PartialEscapeViaReturnMaterialized) {
+    // alloc + store + return(alloc): the Return escapes, the StoreField
+    // doesn't. PEA classifies this as PartialEscape, inserts a Materialize
+    // at the Return, and eliminates the original Allocate.
     Graph g;
     GraphBuilder b(g);
     auto start = b.start();
@@ -78,7 +81,18 @@ TEST(PEAMaterializeTest, GlobalEscapeAllocationKept) {
     PassContext ctx;
     auto r = pass.run(g, ctx);
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    EXPECT_FALSE(g.node(alloc).is_dead());
+    // The Allocate is eliminated — PEA inserted a Materialize for the escape.
+    EXPECT_TRUE(g.node(alloc).is_dead());
+    // A Materialize was inserted.
+    bool found_mat = false;
+    for (std::size_t i = 0; i < g.size(); ++i) {
+        if (!g.node(NodeId{uint32_t(i+1)}).is_dead() &&
+            g.node(NodeId{uint32_t(i+1)}).kind == NodeKind::Materialize) {
+            found_mat = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_mat) << "PEA must insert a Materialize for the escaping Return";
 }
 
 // ── PartialEscape: load forwarded, allocation kept for escape ──

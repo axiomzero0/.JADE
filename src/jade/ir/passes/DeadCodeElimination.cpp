@@ -31,6 +31,35 @@ namespace {
     return uses;
 }
 
+// An effectful node has "external" side effects if removing it would change
+// observable program behavior (e.g., a Call, Throw, Return, or Safepoint).
+// These nodes must NEVER be DCE'd even if they appear to have zero users.
+// Effectful nodes like StoreField and Allocate CAN be DCE'd if they have
+// zero users — their effect is only observable through other nodes that
+// read their results.
+[[nodiscard]] bool has_external_side_effects(NodeKind k) noexcept {
+    switch (k) {
+        case NodeKind::Call:
+        case NodeKind::CallVirt:
+        case NodeKind::CallKnown:
+        case NodeKind::TailCall:
+        case NodeKind::InvokeDynamic:
+        case NodeKind::Return:
+        case NodeKind::Throw:
+        case NodeKind::Rethrow:
+        case NodeKind::Leave:
+        case NodeKind::EndFinally:
+        case NodeKind::MonitorEnter:
+        case NodeKind::MonitorExit:
+        case NodeKind::Safepoint:
+        case NodeKind::Deopt:
+        case NodeKind::Unreachable:
+            return true;
+        default:
+            return false;
+    }
+}
+
 }  // namespace
 
 Result<void> DeadCodeEliminationPass::run(Graph& g, PassContext& /*ctx*/) {
@@ -41,9 +70,16 @@ Result<void> DeadCodeEliminationPass::run(Graph& g, PassContext& /*ctx*/) {
             const NodeId id{static_cast<uint32_t>(i + 1)};
             Node& n = g.node(id);
             if (n.is_dead()) continue;
-            if (n.is_effect()) continue;       // effectful — keep
-            if (n.is_control()) continue;      // control-flow node — keep
-            if (!n.is_pure()) continue;        // unknown state — keep
+            // Control-flow nodes are structural — never DCE.
+            if (n.is_control()) continue;
+            // Nodes with external side effects (Calls, Returns, Throws,
+            // Safepoints) are never DCE'd — they have observable behavior.
+            if (has_external_side_effects(n.kind)) continue;
+            // Effectful nodes WITHOUT external side effects (StoreField,
+            // Allocate, Box, StLoc, StFld, etc.) CAN be DCE'd if they have
+            // zero users. Their effect is only observable through nodes that
+            // read their results — if no one reads them, they're dead.
+            // Pure nodes are always DCE-able if unused.
 
             if (count_uses(g, id) == 0) {
                 g.mark_dead(id);

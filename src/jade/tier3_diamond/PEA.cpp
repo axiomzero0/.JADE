@@ -378,33 +378,50 @@ bool process_allocation(Graph& g, NodeId alloc, const UseLists& uses,
     }
 
     // Eliminate dead stores.
-    for (const auto& ref : uses.duses(alloc.value)) {
-        if (g.node(ref.user).is_dead()) continue;
-        Node& n = g.node(ref.user);
-        if (n.kind != NodeKind::StFld && n.kind != NodeKind::StoreField) continue;
-        if (!has_effect_user(g, ref.user, uses)) {
-            g.mark_dead(ref.user);
-            changed = true;
-        }
-    }
+    // When a StoreField's target allocation is being eliminated, ALL its
+    // stores are dead (the writes are to a dead object). Short-circuit
+    // the effect chain: rewire any node that has this StoreField as its
+    // effect_input to instead use the StoreField's effect_input. This
+    // prevents dead stores from keeping the effect chain alive.
+    //
+    // We do this AFTER the Materialize insertion (below) so that the
+    // effect chain is fully rewired before we check for live data uses.
+    // (Moved to after the alloc elimination check — see below.)
 
     // For PartialEscape: insert a Materialize node at each escaping use,
     // and rewire the escaping use from alloc → materialize.
-    // After this, the alloc has no live uses (the only uses were escaping,
-    // and they now point to the Materialize).
     if (ek == EscapeKind::PartialEscape) {
         int n_mat = insert_materialize_for_partial_escape(g, alloc, uses, fs);
         if (n_mat > 0) changed = true;
     }
 
-    // For NoEscape: eliminate the allocation entirely.
-    // For PartialEscape: after Materialize insertion, the alloc has no live
-    // DATA uses (escaping uses were rewired to the Materialize; non-escaping
-    // uses were forwarded to the stored values by SRA). The alloc may still
-    // have effect-chain users (the If node, etc.), but those are structural
-    // and will be cleaned up by DCE. We eliminate the alloc when it has no
-    // live DATA uses — the effect chain is preserved by wiring the alloc's
-    // effect successors to its effect predecessor (handled by DCE).
+    // Mark ALL StoreFields to this alloc as dead (they're dead stores —
+    // their target is being eliminated). Short-circuit the effect chain
+    // so the dead stores don't keep the effect chain (and thus the alloc)
+    // alive. This must happen BEFORE the has_live_data_use check, because
+    // StoreField reads alloc at slot 0 (SLOT_OBJ) — it counts as a data use.
+    for (const auto& ref : uses.duses(alloc.value)) {
+        if (g.node(ref.user).is_dead()) continue;
+        Node& sn = g.node(ref.user);
+        if (sn.kind != NodeKind::StFld && sn.kind != NodeKind::StoreField) continue;
+        // Short-circuit: rewire all effect successors of this StoreField
+        // to skip it (point them at the StoreField's effect predecessor).
+        NodeId sf_eff = g.effect_input(ref.user);
+        for (std::size_t j = 0; j < g.size(); ++j) {
+            const NodeId other{static_cast<uint32_t>(j + 1)};
+            if (other == ref.user) continue;
+            if (g.node(other).is_dead()) continue;
+            if (g.effect_input(other) == ref.user) {
+                if (sf_eff.valid()) {
+                    g.set_effect_input(other, sf_eff);
+                }
+            }
+        }
+        g.mark_dead(ref.user);
+        changed = true;
+    }
+
+    // Check if the alloc has any live DATA uses (excluding dead StoreFields).
     auto has_live_data_use = [&](const Graph& g, NodeId alloc, const UseLists& uses) -> bool {
         for (const auto& ref : uses.duses(alloc.value)) {
             if (g.node(ref.user).is_dead()) continue;
@@ -413,8 +430,24 @@ bool process_allocation(Graph& g, NodeId alloc, const UseLists& uses,
         }
         return false;
     };
+
+    // For NoEscape or PartialEscape (after Materialize + dead-store elimination):
+    // if the alloc has no live data uses, eliminate it.
     if (ek == EscapeKind::NoEscape || !has_live_data_use(g, alloc, uses)) {
         if (!has_live_data_use(g, alloc, uses)) {
+            // Short-circuit the Allocate: rewire its effect successors to
+            // its effect predecessor.
+            NodeId alloc_eff = g.effect_input(alloc);
+            for (std::size_t j = 0; j < g.size(); ++j) {
+                const NodeId other{static_cast<uint32_t>(j + 1)};
+                if (other == alloc) continue;
+                if (g.node(other).is_dead()) continue;
+                if (g.effect_input(other) == alloc) {
+                    if (alloc_eff.valid()) {
+                        g.set_effect_input(other, alloc_eff);
+                    }
+                }
+            }
             g.mark_dead(alloc);
             changed = true;
         }
