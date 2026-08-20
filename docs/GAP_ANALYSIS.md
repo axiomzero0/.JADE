@@ -118,12 +118,16 @@ ConvOvfI1..ConvOvfU8 (require deopt infrastructure)
 - 3 loop tests pass: `CountToFiveLoop` (i=0→5), `SumOneToTenLoop` (sum=0→45), `CountToHundredLoop` (i=0→100).
 
 **Known limitation: LSRA doesn't account for loop back-edges.**
-The Linear Scan Register Allocator computes live intervals based on linear NodeId positions. It doesn't know that the loop body re-executes. This means a register allocated to a value in Block 0 (e.g., a `ConstInt`) can be reused by a different value in the loop body (Block 3). When the Jump goes back to the loop header, the register no longer holds the original value.
+~~The Linear Scan Register Allocator computes live intervals based on linear NodeId positions. It doesn't know that the loop body re-executes.~~
 
-**Workaround:** Store loop-invariant values (like the loop bound N) in locals via `StLoc`/`LdLoc` before the loop. The `LdLoc` re-reads from memory each iteration, so the value is always correct. All loop tests use this pattern.
+**Fixed (2026-08-20):** The LSRA now calls `extend_intervals_across_loops()` after computing initial live intervals. This method uses BuildRegions to identify loop headers and back-edges, then extends the live interval of any value defined before a loop and used inside it to cover the entire loop body. This prevents the register from being reused for a different value inside the loop.
+
+Also fixed: `BuildRegions::connect_edges` now handles `Jump` nodes — it creates a back-edge from the Jump's block to the Loop header block. Previously, Jump was treated as fall-through, so back-edges were never detected and `is_loop_header` was never set.
+
+Two new tests verify the fix: `LoopWithRegisterInvariantBound` (ConstInt(5) used directly as loop bound) and `LoopWithRegisterInvariantSum` (ConstInt(10) used directly). Both pass without the StLoc/LdLoc workaround.
 
 **Future work:**
-- Fix the LSRA to extend live intervals across loop back-edges (so registers aren't reused for loop-invariant values).
+- ~~Fix the LSRA to extend live intervals across loop back-edges~~ ✅ Done.
 - Implement runtime Phi resolution for register-allocated loop-carried values (the classical Wimmer-Franz copy insertion at predecessor block terminators).
 - Pre-header insertion: LICM marks hoist candidates but the emitter doesn't actually move them before the loop header (GCM is "virtual hoisting" only).
 - OSR: long-running loops in the interpreter can't be promoted to JIT mid-execution.
@@ -202,7 +206,7 @@ The interpreter's giant `switch` defeats branch prediction. GCC's "labels as val
 | :-- | :-- | :-- | :-- |
 | P0 | `BuildRegions` pass (Region/Loop/DominatorTree) | LICM, GCM, LoopUnroll, LoopPeel, LoopUnswitch, PEA-materialization, SRA-with-Phi | ✅ Done |
 | P0 | Block-scheduled `CodeEmitter` (If/Jump/Phi/Region/Loop) | Real JIT branches (no fallback to granit) | ✅ Done — 5 branch tests + 1 loop test pass |
-| P1 | `LICM` (real) + `BCE` (affine) + `ArrayLength`/`LoadElement`/`StoreElement` emission | Array loops at near-native speed | 🟡 Partial — BCE works for constants; affine BCE needs IV range analysis |
+| P1 | `LICM` (real) + `BCE` (affine) + `ArrayLength`/`LoadElement`/`StoreElement` emission | Array loops at near-native speed | 🟡 Partial — BCE works for constants; affine BCE needs IV range analysis; **LSRA now loop-aware** |
 | P1 | Interpreter: fixed stack + computed goto + no-throw | 2-3× faster fallback | ✅ Done (de-throw + fixed stack + __builtin_expect) |
 | P2 | `Inlining` (real) + `Call`/`CallKnown` emission | OO code | ❌ Not started |
 | P2 | `Peephole` (post-regalloc) | 5-10% everywhere | 🟡 Partial — strength reduction only |

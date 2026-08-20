@@ -112,6 +112,13 @@ private:
     // Step 1: compute live intervals via backward dataflow.
     void compute_live_intervals(const Graph& graph);
 
+    // Step 1b: extend live intervals across loop back-edges.
+    // A value used inside a loop must survive across all iterations.
+    // Without this, the LSRA may assign the same register to two values
+    // — one defined before the loop and one inside — corrupting the
+    // loop-invariant value when the back-edge re-enters the loop header.
+    void extend_intervals_across_loops(const Graph& graph);
+
     // Step 2: sort intervals by start position.
     void sort_intervals();
 

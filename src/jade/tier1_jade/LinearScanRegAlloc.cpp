@@ -11,6 +11,7 @@
 #include "jade/ir/NodeKind.hpp"
 #include "jade/ir/NodeFlag.hpp"
 #include "jade/ir/TypeId.hpp"
+#include "jade/ir/passes/BuildRegions.hpp"
 
 #include <algorithm>
 #include <format>
@@ -139,6 +140,89 @@ void LinearScanRegAlloc::compute_live_intervals(const Graph& graph) {
             iv.use_positions.push_back(use_pos);
             // Spill weight: more uses = higher weight = less likely to spill.
             iv.spill_weight += 1.0;
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 1b: Extend live intervals across loop back-edges.
+//
+//   The basic LSRA treats the graph as linear — it doesn't know about loops.
+//   This causes a correctness bug: a value defined before a loop and used
+//   inside the loop (e.g., a loop bound ConstInt) gets a live interval that
+//   ends at its last use. The LSRA may then reuse that register for a
+//   different value inside the loop body. When the Jump back-edge re-enters
+//   the loop header, the register no longer holds the original value.
+//
+//   Fix: for each loop, find all blocks in the loop body. For each value
+//   used in any of those blocks, extend its live interval to cover the
+//   entire loop body (from the loop header's position to the back-edge's
+//   position + 1).
+//
+//   This is conservative — it may extend intervals more than strictly
+//   necessary — but it's correct. A more precise fix would compute
+//   per-block liveness and only extend intervals for values that are
+//   truly live across the back-edge.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void LinearScanRegAlloc::extend_intervals_across_loops(const Graph& graph) {
+    BlockStructure bs = build_block_structure(graph);
+
+    for (const auto& bb : bs.blocks) {
+        if (!bb.is_loop_header) continue;
+
+        // Find the extent of this loop: the loop header block and all
+        // subsequent blocks until the back-edge. We use block IDs as a
+        // proxy — since BuildRegions assigns IDs in NodeId order, blocks
+        // with ID >= loop_header_id and <= the back-edge block are in
+        // the loop body.
+        //
+        // The back-edge block is the one whose last node is a Jump (or
+        // whose successor is the loop header).
+        uint32_t loop_start_block = bb.id;
+        uint32_t loop_end_block = loop_start_block;
+
+        for (uint32_t b = loop_start_block; b < bs.blocks.size(); ++b) {
+            const auto& block = bs.blocks[b];
+            // Check if this block has a successor that's the loop header
+            // (i.e., it's the back-edge block).
+            for (uint32_t succ : block.successors) {
+                if (succ == loop_start_block) {
+                    loop_end_block = b;
+                    break;
+                }
+            }
+        }
+
+        // Compute the position range of the loop body.
+        // Position = NodeId - 1 (0-indexed).
+        uint32_t loop_start_pos = bs.blocks[loop_start_block].leader.valid()
+            ? bs.blocks[loop_start_block].leader.value - 1
+            : 0;
+        uint32_t loop_end_pos = bs.blocks[loop_end_block].last.valid()
+            ? bs.blocks[loop_end_block].last.value
+            : loop_start_pos + 1;
+
+        // For each interval that is used at any position inside the loop,
+        // extend it to cover the entire loop body.
+        for (auto& iv : intervals_) {
+            // If the interval's start is before the loop and it has any use
+            // position inside the loop, extend it.
+            if (iv.start < loop_start_pos) {
+                bool used_in_loop = false;
+                for (uint32_t pos : iv.use_positions) {
+                    if (pos >= loop_start_pos && pos <= loop_end_pos) {
+                        used_in_loop = true;
+                        break;
+                    }
+                }
+                if (used_in_loop && iv.end <= loop_end_pos) {
+                    iv.end = loop_end_pos + 1;
+                    // Increase spill weight — this value is live across
+                    // the entire loop, so spilling it would be expensive.
+                    iv.spill_weight += 10.0;
+                }
+            }
         }
     }
 }
@@ -310,6 +394,7 @@ void LinearScanRegAlloc::assign_spill_slots() {
 
 Result<AllocationResult> LinearScanRegAlloc::allocate(const Graph& graph) {
     compute_live_intervals(graph);
+    extend_intervals_across_loops(graph);
     sort_intervals();
     auto r = walk_intervals();
     if (!r) return std::unexpected(r.error());

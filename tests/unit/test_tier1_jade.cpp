@@ -1178,3 +1178,169 @@ TEST(JadeJitTest, CountToHundredLoop) {
     auto fn = reinterpret_cast<JitFunc>(r->entry_point);
     EXPECT_EQ(fn(), 100);
 }
+
+// ── Loop with register-allocated invariant (no StLoc workaround) ────────────
+//
+// These tests verify that the LSRA's loop-aware interval extension works:
+// a ConstInt used inside a loop stays in its register across back-edges,
+// without needing to be spilled to a local.
+
+TEST(JadeJitTest, LoopWithRegisterInvariantBound) {
+    // i = 0;
+    // while (i < 5) { i = i + 1; }   // 5 is a raw ConstInt, NOT stored in a local
+    // return i;   // 5
+    //
+    // This tests that the LSRA extends the live interval of ConstInt(5)
+    // across the loop back-edge, so its register isn't reused by the
+    // loop body's Add/StLoc.
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+
+    // StLoc(i, 0) — local 0
+    auto zero  = b.const_int(0);
+    auto st_i0 = g.create(NodeKind::StLoc);
+    NodeId st_i0_in[] = {zero}; g.set_data_inputs(st_i0, st_i0_in);
+    g.set_effect_input(st_i0, start);
+    g.side(st_i0).class_id = 0;
+
+    // ConstInt(5) — NOT stored in a local; used directly as the loop bound.
+    auto five = b.const_int(5);
+
+    // Loop header
+    auto loop_hdr = g.create(NodeKind::Loop);
+    g.set_ctrl_input(loop_hdr, start);
+    g.set_effect_input(loop_hdr, st_i0);
+
+    // LdLoc(i), Lt(i, 5)
+    auto ld_i = g.create(NodeKind::LdLoc);
+    g.side(ld_i).class_id = 0;
+    NodeId lt_in[] = {ld_i, five};
+    auto lt = g.create(NodeKind::Lt, lt_in);
+
+    auto if_node = b.if_node(lt);
+    g.set_ctrl_input(if_node, loop_hdr);
+    g.set_effect_input(if_node, loop_hdr);
+
+    // IfFalse → exit: return i
+    auto iffalse = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto ld_i_exit = g.create(NodeKind::LdLoc);
+    g.side(ld_i_exit).class_id = 0;
+    auto ret = b.return_node(ld_i_exit);
+    g.set_ctrl_input(ret, iffalse);
+    g.set_effect_input(ret, iffalse);
+
+    // IfTrue → body: i = i + 1; jump back
+    auto iftrue = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+    auto ld_i_body = g.create(NodeKind::LdLoc);
+    g.side(ld_i_body).class_id = 0;
+    auto one = b.const_int(1);
+    NodeId add_in[] = {ld_i_body, one};
+    auto add = g.create(NodeKind::Add, add_in);
+    auto st_i = g.create(NodeKind::StLoc);
+    NodeId st_i_in[] = {add}; g.set_data_inputs(st_i, st_i_in);
+    g.set_ctrl_input(st_i, iftrue);
+    g.set_effect_input(st_i, iftrue);
+    g.side(st_i).class_id = 0;
+
+    auto jump = g.create(NodeKind::Jump);
+    g.set_ctrl_input(jump, st_i);
+    g.set_effect_input(jump, st_i);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 5);
+}
+
+TEST(JadeJitTest, LoopWithRegisterInvariantSum) {
+    // sum = 0; i = 0;
+    // while (i < 10) { sum = sum + i; i = i + 1; }   // 10 is raw ConstInt
+    // return sum;   // 45
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+
+    // StLoc(sum, 0) — local 0
+    auto zero_a = b.const_int(0);
+    auto st_sum0 = g.create(NodeKind::StLoc);
+    NodeId st_sum0_in[] = {zero_a}; g.set_data_inputs(st_sum0, st_sum0_in);
+    g.set_effect_input(st_sum0, start);
+    g.side(st_sum0).class_id = 0;
+
+    // StLoc(i, 0) — local 1
+    auto zero_b = b.const_int(0);
+    auto st_i0 = g.create(NodeKind::StLoc);
+    NodeId st_i0_in[] = {zero_b}; g.set_data_inputs(st_i0, st_i0_in);
+    g.set_effect_input(st_i0, st_sum0);
+    g.side(st_i0).class_id = 1;
+
+    // ConstInt(10) — raw, NOT in a local
+    auto ten = b.const_int(10);
+
+    // Loop header
+    auto loop_hdr = g.create(NodeKind::Loop);
+    g.set_ctrl_input(loop_hdr, start);
+    g.set_effect_input(loop_hdr, st_i0);
+
+    // LdLoc(i), Lt(i, 10)
+    auto ld_i_cmp = g.create(NodeKind::LdLoc);
+    g.side(ld_i_cmp).class_id = 1;
+    NodeId lt_in[] = {ld_i_cmp, ten};
+    auto lt = g.create(NodeKind::Lt, lt_in);
+
+    auto if_node = b.if_node(lt);
+    g.set_ctrl_input(if_node, loop_hdr);
+    g.set_effect_input(if_node, loop_hdr);
+
+    // IfFalse → exit: return sum
+    auto iffalse = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto ld_sum_exit = g.create(NodeKind::LdLoc);
+    g.side(ld_sum_exit).class_id = 0;
+    auto ret = b.return_node(ld_sum_exit);
+    g.set_ctrl_input(ret, iffalse);
+    g.set_effect_input(ret, iffalse);
+
+    // IfTrue → body
+    auto iftrue = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+
+    // sum = sum + i
+    auto ld_sum = g.create(NodeKind::LdLoc);
+    g.side(ld_sum).class_id = 0;
+    auto ld_i_body = g.create(NodeKind::LdLoc);
+    g.side(ld_i_body).class_id = 1;
+    NodeId add_sum_in[] = {ld_sum, ld_i_body};
+    auto add_sum = g.create(NodeKind::Add, add_sum_in);
+    auto st_sum = g.create(NodeKind::StLoc);
+    NodeId st_sum_in[] = {add_sum}; g.set_data_inputs(st_sum, st_sum_in);
+    g.set_ctrl_input(st_sum, iftrue);
+    g.set_effect_input(st_sum, iftrue);
+    g.side(st_sum).class_id = 0;
+
+    // i = i + 1
+    auto ld_i_inc = g.create(NodeKind::LdLoc);
+    g.side(ld_i_inc).class_id = 1;
+    auto one = b.const_int(1);
+    NodeId add_i_in[] = {ld_i_inc, one};
+    auto add_i = g.create(NodeKind::Add, add_i_in);
+    auto st_i = g.create(NodeKind::StLoc);
+    NodeId st_i_in[] = {add_i}; g.set_data_inputs(st_i, st_i_in);
+    g.set_effect_input(st_i, st_sum);
+    g.side(st_i).class_id = 1;
+
+    // Jump back-edge → loop header
+    auto jump = g.create(NodeKind::Jump);
+    g.set_ctrl_input(jump, st_i);
+    g.set_effect_input(jump, st_i);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 45);
+}
