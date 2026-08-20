@@ -1,0 +1,9 @@
+// After PEA: the element alloc escapes (stored into array). Both allocs kept.
+graph allocation_stored_into_array_after_pea {
+    %1 = Start
+    %2 = Allocate shape=2   effect_in=%1
+    %3 = Allocate shape=1   effect_in=%2
+    %4 = ConstInt 0
+    %5 = StoreElement %2, %4, %3  effect_in=%3
+    %6 = Return %2          ctrl_in=%1 effect_in=%5
+}

@@ -1,0 +1,13 @@
+// After PEA: A escapes via Return → Materialize. B escapes via A's field
+// (stored into A) → B also gets a Materialize. Both Allocate nodes dead.
+graph recursive_allocation_after_pea {
+    %1 = Start
+    %2 = Allocate shape=1   [DEAD]
+    %3 = Allocate shape=1   [DEAD]
+    %4 = ConstInt 99
+    %5 = StoreField %3, off=0, %4  [DEAD]
+    %6 = StoreField %2, off=0, %3  [DEAD]
+    %MB = Materialize %4    effect_in=%1   ← B materialized (field=99)
+    %MA = Materialize %MB   effect_in=%MB  ← A materialized (field=B)
+    %7 = Return %MA          ctrl_in=%1 effect_in=%MA
+}

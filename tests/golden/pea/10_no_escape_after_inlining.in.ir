@@ -1,0 +1,12 @@
+// 10_no_escape_after_inlining: alloc that would escape via a Call, but
+// the Call is inlined and the alloc turns out to be NoEscape.
+// (Inlining is a no-op in the current implementation — this test documents
+// the target behavior when Inlining is real.)
+graph no_escape_after_inlining {
+    %1 = Start
+    %2 = ConstInt 42
+    %3 = Allocate shape=1   effect_in=%1
+    %4 = StoreField %3, off=0, %2  effect_in=%3
+    %5 = LoadField %3, off=0  effect_in=%4
+    %6 = Return %5           ctrl_in=%1 effect_in=%5
+}

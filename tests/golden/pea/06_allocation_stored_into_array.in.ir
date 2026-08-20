@@ -1,0 +1,9 @@
+// 06_allocation_stored_into_array: alloc escapes via StoreElement.
+graph allocation_stored_into_array {
+    %1 = Start
+    %2 = Allocate shape=2   effect_in=%1   // the array
+    %3 = Allocate shape=1   effect_in=%2   // the element
+    %4 = ConstInt 0
+    %5 = StoreElement %2, %4, %3  effect_in=%3   // arr[0] = elem — escapes
+    %6 = Return %2          ctrl_in=%1 effect_in=%5   // return arr
+}

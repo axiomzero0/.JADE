@@ -547,10 +547,53 @@ bool process_box(Graph& g, NodeId box, const UseLists& uses,
 }  // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Pattern: Unbox(Box(v)) → v  (round-trip elimination)
+//
+// This is a special-case optimization that runs BEFORE the main PEA analysis.
+// The Box→Unbox round-trip is a no-op: it boxes v into a heap object and
+// immediately unboxes it back. PEA's escape analysis treats Unbox as an
+// escaping use (slot == SLOT_OBJ), which prevents elimination. By pattern-
+// matching the round-trip first, we avoid the need for escape analysis on
+// this trivial case.
+// ─────────────────────────────────────────────────────────────────────────────
+
+[[nodiscard]] bool eliminate_box_unbox_roundtrips(Graph& g) {
+    bool changed = false;
+    for (std::size_t i = 0; i < g.size(); ++i) {
+        const NodeId id{static_cast<uint32_t>(i + 1)};
+        Node& n = g.node(id);
+        if (n.is_dead()) continue;
+        if (n.kind != NodeKind::Unbox && n.kind != NodeKind::UnboxAny) continue;
+
+        auto inputs = g.data_inputs(id);
+        if (inputs.empty() || !inputs[0].valid()) continue;
+        NodeId box_id = inputs[0];
+        if (box_id.value > g.size()) continue;
+        const Node& box = g.node(box_id);
+        if (box.is_dead() || box.kind != NodeKind::Box) continue;
+
+        // Get the Box's input (the boxed value).
+        auto box_inputs = g.data_inputs(box_id);
+        if (box_inputs.empty() || !box_inputs[0].valid()) continue;
+        NodeId boxed_val = box_inputs[0];
+
+        // Replace all uses of the Unbox with the boxed value.
+        g.replace_all_uses(id, boxed_val);
+        g.mark_dead(id);
+        changed = true;
+    }
+    return changed;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PEA main pass.
 // ─────────────────────────────────────────────────────────────────────────────
 
 Result<void> PEAPass::run(Graph& g, PassContext& /*ctx*/) {
+    // Phase 0: Eliminate Box→Unbox round-trips before escape analysis.
+    // This is a pattern-match optimization that doesn't need escape info.
+    eliminate_box_unbox_roundtrips(g);
+
     UseLists uses;
     uses.build(g);
 

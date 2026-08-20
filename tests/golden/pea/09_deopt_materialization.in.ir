@@ -1,0 +1,11 @@
+// 09_deopt_materialization: alloc referenced by a FrameState (deopt point).
+// Phase 1 bails out on guards — documents the Phase 4 gap.
+graph deopt_materialization {
+    %1 = Start
+    %2 = ConstInt 42
+    %3 = Allocate shape=1   effect_in=%1
+    %4 = StoreField %3, off=0, %2  effect_in=%3
+    %5 = CheckNotNull %3    ctrl_in=%1 effect_in=%4  state=FrameState(1)
+    %6 = LoadField %3, off=0  effect_in=%5
+    %7 = Return %6           ctrl_in=%5 effect_in=%6
+}

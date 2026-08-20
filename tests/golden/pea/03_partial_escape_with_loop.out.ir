@@ -1,0 +1,36 @@
+// Expected IR after PEA + DCE on 03_partial_escape_with_loop.
+//
+// The Allocate inside the loop is eliminated (NoEscape — never leaves the body).
+// StoreField and LoadField are eliminated (SRA forwards to the stored value).
+// The Add reads the forwarded value directly.
+
+graph partial_escape_with_loop_after_pea {
+    %1 = Start
+    %2 = ConstInt 0
+    %3 = StLoc local=0, %2    effect_in=%1
+    %4 = ConstInt 0
+    %5 = StLoc local=1, %4    effect_in=%3
+    %6 = ConstInt 10
+    %7 = StLoc local=2, %6    effect_in=%5
+    %8 = Loop                 ctrl_in=%1 effect_in=%7
+    %9 = LdLoc local=1
+    %10 = LdLoc local=2
+    %11 = Lt %9, %10
+    %12 = If %11              ctrl_in=%8 effect_in=%8
+    %13 = IfFalse              ctrl_in=%12
+    %14 = LdLoc local=0
+    %15 = Return %14           ctrl_in=%13 effect_in=%13
+    %16 = IfTrue               ctrl_in=%12
+    %17 = Allocate shape=1    [DEAD]
+    %18 = LdLoc local=1
+    %19 = StoreField %17, off=0, %18   [DEAD]
+    %20 = LoadField %17, off=0         [DEAD]  ← forwarded to %18
+    %21 = LdLoc local=0
+    %22 = Add %21, %18                  ← reads %18 (forwarded), not %20
+    %23 = StLoc local=0, %22   effect_in=%16
+    %24 = LdLoc local=1
+    %25 = ConstInt 1
+    %26 = Add %24, %25
+    %27 = StLoc local=1, %26   effect_in=%23
+    %28 = Jump                  ctrl_in=%27 effect_in=%27
+}

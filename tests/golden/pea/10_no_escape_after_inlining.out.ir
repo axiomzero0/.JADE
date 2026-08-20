@@ -1,0 +1,9 @@
+// After PEA: same as 01 — full elimination, Return reads ConstInt.
+graph no_escape_after_inlining_after_pea {
+    %1 = Start
+    %2 = ConstInt 42
+    %3 = Allocate shape=1   [DEAD]
+    %4 = StoreField %3, off=0, %2  [DEAD]
+    %5 = LoadField %3, off=0  [DEAD]
+    %6 = Return %2           ctrl_in=%1 effect_in=%1
+}

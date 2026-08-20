@@ -30,6 +30,7 @@ add_executable(jade_unit_tests
     unit/test_regression.cpp
     unit/test_regression_pea.cpp
     unit/test_golden_pea.cpp
+    unit/test_pea_java.cpp
 )
 
 jade_target_apply_tooling_flags(jade_unit_tests)

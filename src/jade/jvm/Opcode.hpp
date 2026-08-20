@@ -215,10 +215,10 @@ enum class JvmOpcode : uint16_t {
     Return           = 0xB1,
 
     // ── Fields ──
-    Getfield         = 0xB2,
-    Putfield         = 0xB3,
-    Getstatic        = 0xB4,
-    Putstatic        = 0xB5,
+    Getstatic        = 0xB2,
+    Putstatic        = 0xB3,
+    Getfield         = 0xB4,
+    Putfield         = 0xB5,
 
     // ── Method invocation ──
     Invokevirtual    = 0xB6,

@@ -1,0 +1,11 @@
+// 05_allocation_in_try_catch: alloc in try, escapes only on catch path.
+// (Documents the Phase 4 guard/FrameState gap — PEA bails out on guards.)
+graph allocation_in_try_catch {
+    %1 = Start
+    %2 = ConstInt 42
+    %3 = Allocate shape=1   effect_in=%1
+    %4 = StoreField %3, off=0, %2  effect_in=%3
+    // Guard (modeling a try-block boundary)
+    %5 = CheckNotNull %3    ctrl_in=%1 effect_in=%4  state=FrameState(1)
+    %6 = Return %3          ctrl_in=%5 effect_in=%5
+}

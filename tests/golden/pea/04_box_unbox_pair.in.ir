@@ -1,0 +1,8 @@
+// 04_box_unbox_pair: Box(v) → Unbox(Box) round-trip. PEA eliminates both.
+graph box_unbox_pair {
+    %1 = Start
+    %2 = ConstInt 42
+    %3 = Box %2              effect_in=%1
+    %4 = Unbox %3            effect_in=%3
+    %5 = Return %4           ctrl_in=%1 effect_in=%4
+}

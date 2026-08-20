@@ -1,0 +1,11 @@
+// 08_recursive_allocation: alloc A whose field points to another alloc B.
+// B escapes via A's field. A itself doesn't escape beyond that.
+graph recursive_allocation {
+    %1 = Start
+    %2 = Allocate shape=1   effect_in=%1   // A
+    %3 = Allocate shape=1   effect_in=%2   // B
+    %4 = ConstInt 99
+    %5 = StoreField %3, off=0, %4  effect_in=%3   // B.field = 99
+    %6 = StoreField %2, off=0, %3  effect_in=%5   // A.field = B — B escapes
+    %7 = Return %2          ctrl_in=%1 effect_in=%6   // return A
+}

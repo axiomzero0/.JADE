@@ -1,0 +1,9 @@
+// After PEA: alloc escapes via Throw → Materialize inserted, Allocate dead.
+graph allocation_used_in_throw_after_pea {
+    %1 = Start
+    %2 = ConstInt 42
+    %3 = Allocate shape=1   [DEAD]
+    %4 = StoreField %3, off=0, %2  [DEAD]
+    %M = Materialize %2     effect_in=%1   ← INSERTED
+    %5 = Throw %M            ctrl_in=%1 effect_in=%M
+}
