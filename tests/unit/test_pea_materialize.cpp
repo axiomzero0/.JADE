@@ -83,7 +83,13 @@ TEST(PEAMaterializeTest, GlobalEscapeAllocationKept) {
 
 // ── PartialEscape: load forwarded, allocation kept for escape ──
 
-TEST(PEAMaterializeTest, PartialEscapeLoadForwardedButAllocKept) {
+TEST(PEAMaterializeTest, PartialEscapeLoadForwardedAndMaterializeInserted) {
+    // The allocation escapes via Return, but the field load is non-escaping.
+    // PEA should:
+    //   - Forward the load (eliminate LdFld).
+    //   - Insert a Materialize at the Return's escape point.
+    //   - Rewire the Return to read the Materialize instead of the alloc.
+    //   - Eliminate the original Allocate (it's now dead).
     Graph g;
     GraphBuilder b(g);
     auto start = b.start();
@@ -105,8 +111,19 @@ TEST(PEAMaterializeTest, PartialEscapeLoadForwardedButAllocKept) {
     ASSERT_TRUE(r.has_value()) << r.error().what();
     // The load should be eliminated (forwarded).
     EXPECT_TRUE(g.node(lf).is_dead());
-    // The allocation should still be alive (escaping via return).
-    EXPECT_FALSE(g.node(alloc).is_dead());
+    // The original allocation should be dead — its only escaping use (the
+    // Return) was rewired to a Materialize node.
+    EXPECT_TRUE(g.node(alloc).is_dead());
+    // A Materialize node should have been inserted.
+    bool found_materialize = false;
+    for (std::size_t i = 0; i < g.size(); ++i) {
+        const NodeId id{static_cast<uint32_t>(i + 1)};
+        if (g.node(id).kind == NodeKind::Materialize) {
+            found_materialize = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_materialize) << "PEA should insert a Materialize node";
 }
 
 // ── Box elimination: Box(v) that never escapes ──

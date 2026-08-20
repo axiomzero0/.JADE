@@ -1,0 +1,65 @@
+// Golden IR test for PEA — partial escape with if-then-else.
+//
+// Source pattern:
+//   alloc = new Object();
+//   alloc.field = 42;
+//   if (cond) {
+//     return alloc;        // ESCAPES — must materialize here
+//   } else {
+//     return alloc.field;  // non-escaping — SRA forwards to ConstInt(42)
+//   }
+//
+// Input IR (before PEA):
+//   %1 = Start
+//   %2 = ConstInt 42
+//   %3 = Allocate shape=1
+//   %4 = StoreField %3, off=0, %2
+//   %5 = ConstInt 1
+//   %6 = If %5
+//   %7 = IfTrue  (→ %6)
+//   %8 = Return %3           ← escapes
+//   %9 = IfFalse (→ %6)
+//   %10 = LoadField %3, off=0  ← non-escaping
+//   %11 = Return %10
+//
+// Expected IR (after PEA):
+//   %1 = Start
+//   %2 = ConstInt 42
+//   %3 = Allocate shape=1   ← DEAD (eliminated by PEA)
+//   %4 = StoreField %3, off=0, %2   ← DEAD
+//   %5 = ConstInt 1
+//   %6 = If %5
+//   %7 = IfTrue  (→ %6)
+//   %M = Materialize %2     ← INSERTED by PEA at the escape point
+//   %8 = Return %M           ← rewired from %3 to %M
+//   %9 = IfFalse (→ %6)
+//   %10 = LoadField %3, off=0   ← DEAD (forwarded to %2)
+//   %11 = Return %2           ← rewired from %10 to %2 (the forwarded value)
+//
+// Key invariants (Rule B.5, B.6):
+//   - Exactly one Materialize node is inserted.
+//   - The original Allocate is dead.
+//   - The escaping Return reads the Materialize.
+//   - The non-escaping Return reads the forwarded value (ConstInt 42).
+
+graph partial_escape_with_if {
+    // Block 0 (entry)
+    %1 = Start
+    %2 = ConstInt 42
+    %3 = Allocate shape=1
+    %4 = StoreField %3, off=0, %2  effect_in=%3
+    %5 = ConstInt 1
+    %6 = If %5                    ctrl_in=%1 effect_in=%4
+
+    // Block 1 (true branch — escaping)
+    %7 = IfTrue                   ctrl_in=%6
+    %8 = Return %3                ctrl_in=%7 effect_in=%6
+    // ↑ %3 escapes here → PEA inserts Materialize before %8, rewires %8 to %M
+
+    // Block 2 (false branch — non-escaping)
+    %9 = IfFalse                  ctrl_in=%6
+    %10 = LoadField %3, off=0     effect_in=%9
+    %11 = Return %10              ctrl_in=%9 effect_in=%10
+    // ↑ %10 is non-escaping → PEA forwards %10 to %2 (SRA)
+    //   then %11 = Return %2
+}

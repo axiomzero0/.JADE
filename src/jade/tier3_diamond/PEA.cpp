@@ -148,16 +148,25 @@ struct FieldState {
 }
 
 [[nodiscard]] bool has_live_use(const Graph& g, NodeId alloc, const UseLists& uses) {
-    for (const auto& ref : uses.duses(alloc.value))
-        if (!g.node(ref.user).is_dead()) return true;
+    for (const auto& ref : uses.duses(alloc.value)) {
+        if (g.node(ref.user).is_dead()) continue;
+        // Check if this use still references `alloc` — it may have been
+        // rewired to a different node (e.g., a Materialize) by replace_one_use.
+        auto inputs = g.data_inputs(ref.user);
+        if (ref.slot < inputs.size() && inputs[ref.slot] == alloc) return true;
+    }
     for (NodeId eu : uses.euses(alloc.value))
         if (!g.node(eu).is_dead()) return true;
     return false;
 }
 
 [[nodiscard]] bool has_effect_user(const Graph& g, NodeId id, const UseLists& uses) {
-    for (NodeId eu : uses.euses(id.value))
-        if (!g.node(eu).is_dead()) return true;
+    for (NodeId eu : uses.euses(id.value)) {
+        if (g.node(eu).is_dead()) continue;
+        // Check if this effect user still has `id` as its effect input —
+        // it may have been rewired to a different node (e.g., a Materialize).
+        if (g.effect_input(eu) == id) return true;
+    }
     return false;
 }
 
@@ -197,8 +206,107 @@ struct FieldState {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Process one allocation.
+// Insert a Materialize node for an allocation that partially escapes.
+//
+// For each escaping use of `alloc`:
+//   1. Collect the latest stored value for each field (from the FieldState).
+//   2. Create a Materialize node with those field values as data inputs.
+//   3. Wire the Materialize into the effect chain immediately before the
+//      escaping use (so the materialization happens at the exact point of
+//      escape — the cold path).
+//   4. Rewire the escaping use from `alloc` → `materialize` (using
+//      replace_one_use so non-escaping uses are untouched).
+//   5. Set the Materialize's side_data.field_offset to mark which alloc it
+//      materializes (for the verifier and for the emitter).
+//
+// After all escaping uses are rewired, the original Allocate has no live
+// uses → DCE handles it.
+//
+// Returns the number of Materialize nodes inserted.
 // ─────────────────────────────────────────────────────────────────────────────
+
+int insert_materialize_for_partial_escape(Graph& g, NodeId alloc,
+                                            const UseLists& uses,
+                                            const FieldState& fs) {
+    int inserted = 0;
+
+    // Snapshot the escaping uses — we'll modify the use lists as we go.
+    std::vector<UseRef> escaping_uses;
+    for (const auto& ref : uses.duses(alloc.value)) {
+        if (g.node(ref.user).is_dead()) continue;
+        if (escapes_in_slot(g.node(ref.user).kind, ref.slot)) {
+            escaping_uses.push_back(ref);
+        }
+    }
+
+    for (const auto& ref : escaping_uses) {
+        Node& user = g.node(ref.user);
+        if (user.is_dead()) continue;
+
+        // Collect the field values for this materialization.
+        // We use the latest stored value per field. If a field has no
+        // stored value, we use ConstInt(0) as a default (the field is
+        // uninitialized — matches default zero-init for new objects).
+        std::vector<NodeId> field_values;
+        for (const auto& [off, info] : fs.fields) {
+            field_values.push_back(info.value);
+        }
+        // If there are no fields at all (e.g., a Box of a primitive),
+        // use the Box's own input value as the single field.
+        if (field_values.empty()) {
+            auto alloc_inputs = g.data_inputs(alloc);
+            if (!alloc_inputs.empty()) {
+                field_values.push_back(alloc_inputs[0]);
+            } else {
+                field_values.push_back(g.create_const_int(0));
+            }
+        }
+
+        // Create the Materialize node.
+        NodeId mat = g.create(NodeKind::Materialize,
+                              std::span<const NodeId>{field_values});
+
+        // Wire the Materialize into the effect chain immediately before the
+        // escaping use. The escaping use's effect_input currently points to
+        // some node X; we change it to point to the Materialize, and the
+        // Materialize's effect_input points to X.
+        NodeId user_eff = g.effect_input(ref.user);
+        if (user_eff.valid()) {
+            g.set_effect_input(mat, user_eff);
+            g.set_effect_input(ref.user, mat);
+        } else {
+            // The escaping use has no effect input (e.g., a Return).
+            // Wire the Materialize after the allocation's effect chain.
+            NodeId alloc_eff = g.effect_input(alloc);
+            if (alloc_eff.valid()) {
+                g.set_effect_input(mat, alloc_eff);
+            }
+        }
+
+        // Copy the allocation's control input (so the Materialize is in
+        // the same block as the escaping use — conceptually).
+        NodeId user_ctrl = g.ctrl_input(ref.user);
+        if (user_ctrl.valid()) {
+            g.set_ctrl_input(mat, user_ctrl);
+        } else {
+            NodeId alloc_ctrl = g.ctrl_input(alloc);
+            if (alloc_ctrl.valid()) g.set_ctrl_input(mat, alloc_ctrl);
+        }
+
+        // Mark the Materialize with the source allocation's ID for the
+        // verifier and emitter. We reuse class_id as the alloc NodeId.
+        g.side(mat).class_id = alloc.value;
+
+        // Rewire the escaping use from alloc → materialize.
+        g.replace_one_use(alloc, mat, ref.user, ref.slot);
+
+        ++inserted;
+    }
+
+    return inserted;
+}
+
+
 bool process_allocation(Graph& g, NodeId alloc, const UseLists& uses,
                           const BlockStructure& bs) {
     if (g.node(alloc).is_dead()) return false;
@@ -208,20 +316,18 @@ bool process_allocation(Graph& g, NodeId alloc, const UseLists& uses,
 
     if (ek == EscapeKind::GlobalEscape) return false;
 
-    // For both NoEscape and PartialEscape, do SRA on non-escaping uses.
-    // For PartialEscape, we'd also insert Materialize at escape points —
-    // but that requires Graph::create_node_at_block() which we don't have yet.
-    // For now, treat PartialEscape like NoEscape (optimistic): do SRA on
-    // all non-escaping uses, and if the escaping uses are still live,
-    // keep the allocation for them.
+    // For both NoEscape and PartialEscape, do SRA on non-escaping uses:
+    //   - Forward LoadField → stored value.
+    //   - Eliminate dead stores.
     //
-    // This is safe because:
-    // - Non-escaping uses are forwarded correctly (SRA).
-    // - Escaping uses still see the original allocation (we don't eliminate it
-    //   if it has live escaping uses).
-    // - The only loss is that we don't eliminate the allocation itself
-    //   when it partially escapes — but we still get the SRA benefit on
-    //   non-escaping field accesses.
+    // For PartialEscape, additionally:
+    //   - Insert a Materialize node at each escaping use.
+    //   - Rewire the escaping use from alloc → materialize.
+    //   - The original Allocate becomes dead (DCE removes it).
+    //
+    // This is the headline PEA transformation: the hot path has zero
+    // allocations (the Allocate is dead), and the cold path pays the
+    // materialization cost only when actually taken.
 
     FieldState fs;
     bool changed = false;
@@ -282,11 +388,33 @@ bool process_allocation(Graph& g, NodeId alloc, const UseLists& uses,
         }
     }
 
+    // For PartialEscape: insert a Materialize node at each escaping use,
+    // and rewire the escaping use from alloc → materialize.
+    // After this, the alloc has no live uses (the only uses were escaping,
+    // and they now point to the Materialize).
+    if (ek == EscapeKind::PartialEscape) {
+        int n_mat = insert_materialize_for_partial_escape(g, alloc, uses, fs);
+        if (n_mat > 0) changed = true;
+    }
+
     // For NoEscape: eliminate the allocation entirely.
-    // For PartialEscape: only eliminate if no live escaping uses remain
-    // (the escaping uses may have been dead-code-eliminated by other passes).
-    if (ek == EscapeKind::NoEscape || !has_live_use(g, alloc, uses)) {
-        if (!has_live_use(g, alloc, uses)) {
+    // For PartialEscape: after Materialize insertion, the alloc has no live
+    // DATA uses (escaping uses were rewired to the Materialize; non-escaping
+    // uses were forwarded to the stored values by SRA). The alloc may still
+    // have effect-chain users (the If node, etc.), but those are structural
+    // and will be cleaned up by DCE. We eliminate the alloc when it has no
+    // live DATA uses — the effect chain is preserved by wiring the alloc's
+    // effect successors to its effect predecessor (handled by DCE).
+    auto has_live_data_use = [&](const Graph& g, NodeId alloc, const UseLists& uses) -> bool {
+        for (const auto& ref : uses.duses(alloc.value)) {
+            if (g.node(ref.user).is_dead()) continue;
+            auto inputs = g.data_inputs(ref.user);
+            if (ref.slot < inputs.size() && inputs[ref.slot] == alloc) return true;
+        }
+        return false;
+    };
+    if (ek == EscapeKind::NoEscape || !has_live_data_use(g, alloc, uses)) {
+        if (!has_live_data_use(g, alloc, uses)) {
             g.mark_dead(alloc);
             changed = true;
         }
@@ -297,6 +425,10 @@ bool process_allocation(Graph& g, NodeId alloc, const UseLists& uses,
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Box elimination: Box(v) where the boxed object never escapes.
+//
+// For PartialEscape Boxes, we insert a Materialize at each escaping use
+// (same transformation as for Allocate). The Materialize reads the boxed
+// value as its single field input.
 // ─────────────────────────────────────────────────────────────────────────────
 bool process_box(Graph& g, NodeId box, const UseLists& uses,
                    const BlockStructure& bs) {
@@ -320,11 +452,48 @@ bool process_box(Graph& g, NodeId box, const UseLists& uses,
         return true;
     }
 
-    // For PartialEscape: replace only non-escaping uses.
-    // Escaping uses still need the Box.
-    // We can't selectively replace uses without a per-use rewire API,
-    // so we only eliminate when the Box has no escaping uses left
-    // (they may have been DCE'd).
+    // PartialEscape: replace non-escaping uses with the boxed value,
+    // and insert a Materialize at each escaping use.
+    //
+    // Step 1: Eliminate non-escaping LoadField/StoreField uses by SRA.
+    //   - LoadField(box, off) → forwarded to the boxed value (val).
+    //     (The Box wraps val as its single field at offset 0.)
+    //   - Other non-escaping uses (LdFlda, ArrayLength, etc.) → rewire to val.
+    for (const auto& ref : uses.duses(box.value)) {
+        if (g.node(ref.user).is_dead()) continue;
+        Node& user = g.node(ref.user);
+        if (!escapes_in_slot(user.kind, ref.slot)) {
+            if ((user.kind == NodeKind::LoadField || user.kind == NodeKind::LdFld)
+                && ref.slot == SLOT_OBJ) {
+                // Forward the load to the boxed value (field 0 of the Box).
+                g.replace_all_uses(ref.user, boxed_val);
+                g.mark_dead(ref.user);
+            } else {
+                // Rewire the non-escaping use from box → boxed_val.
+                g.replace_one_use(box, boxed_val, ref.user, ref.slot);
+            }
+        }
+    }
+
+    // Step 2: Insert a Materialize at each escaping use.
+    // The Materialize reads the boxed value as its single field.
+    FieldState box_fs;
+    box_fs.fields[0] = {boxed_val, box};
+    box_fs.store_count[0] = 1;
+    int n_mat = insert_materialize_for_partial_escape(g, box, uses, box_fs);
+    if (n_mat > 0) {
+        // The Box itself is now dead — all escaping uses were rewired to
+        // the Materialize, and all non-escaping uses were eliminated or
+        // rewired to boxed_val.
+        if (!has_live_use(g, box, uses)) {
+            g.mark_dead(box);
+        }
+        return true;
+    }
+
+    // No Materialize inserted — fall back to the optimistic case:
+    // eliminate only if there are no escaping uses left (they may have been
+    // DCE'd by other passes).
     bool has_escape = false;
     for (const auto& ref : uses.duses(box.value)) {
         if (g.node(ref.user).is_dead()) continue;

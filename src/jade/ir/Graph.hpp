@@ -86,6 +86,12 @@ public:
     // Does NOT touch ctrl or effect inputs (those are structural).
     void replace_all_uses(NodeId old_id, NodeId new_id);
 
+    // Replace ONE data-input reference: in `user`'s slot `slot`, replace
+    // `old_id` with `new_id`. Used by PEA to selectively rewire non-escaping
+    // uses while leaving escaping uses pointing at the original allocation.
+    // Returns true if a replacement was made.
+    bool replace_one_use(NodeId old_id, NodeId new_id, NodeId user, std::size_t slot);
+
     // ── Whole-graph queries ────────────────────────────────────────────────
     [[nodiscard]] std::size_t size() const noexcept { return nodes_.size(); }
     [[nodiscard]] NodeId start_node() const noexcept {

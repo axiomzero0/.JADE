@@ -1,0 +1,48 @@
+// Expected IR after PEA runs on 02_partial_escape_with_if.in.ir
+//
+// Transformations applied:
+//   1. SRA forwards %10 (LoadField %3, off=0) → %2 (ConstInt 42).
+//      %10 is marked dead.
+//      %11 (Return %10) is rewired to %11 (Return %2).
+//   2. PEA inserts %M (Materialize %2) at the escape point (%8's effect chain).
+//      %8 (Return %3) is rewired to %8 (Return %M).
+//   3. The original Allocate %3 and StoreField %4 become dead (no live uses).
+//      (DCE will remove them in a follow-up pass.)
+//
+// Key invariants:
+//   - Exactly ONE Materialize node exists in the output.
+//   - The Materialize's data input is %2 (the stored field value).
+//   - The escaping Return (%8) reads the Materialize, not %3.
+//   - The non-escaping Return (%11) reads %2 (the forwarded value), not %10.
+//   - %3 (Allocate) and %4 (StoreField) are dead.
+
+graph partial_escape_with_if_after_pea {
+    // Block 0 (entry)
+    %1 = Start
+    %2 = ConstInt 42
+    %3 = Allocate shape=1          [DEAD]   ← eliminated by PEA
+    %4 = StoreField %3, off=0, %2  [DEAD]   ← eliminated by PEA
+    %5 = ConstInt 1
+    %6 = If %5                     ctrl_in=%1 effect_in=%4
+
+    // Block 1 (true branch — escaping)
+    %7 = IfTrue                    ctrl_in=%6
+    %M = Materialize %2            effect_in=%6   ← INSERTED by PEA
+    %8 = Return %M                  ctrl_in=%7 effect_in=%M
+    // ↑ rewired from %3 to %M
+
+    // Block 2 (false branch — non-escaping)
+    %9 = IfFalse                   ctrl_in=%6
+    %10 = LoadField %3, off=0      [DEAD]   ← eliminated by SRA (forwarded to %2)
+    %11 = Return %2                 ctrl_in=%9 effect_in=%9
+    // ↑ rewired from %10 to %2
+}
+
+// Verification (Rule 37):
+//   assert count(Materialize) == 1
+//   assert Materialize.data_inputs == [%2]
+//   assert Return[%8].data_inputs[0] == %M
+//   assert Return[%11].data_inputs[0] == %2
+//   assert Allocate.is_dead == true
+//   assert StoreField.is_dead == true
+//   assert LoadField.is_dead == true

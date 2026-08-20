@@ -119,6 +119,20 @@ void Graph::replace_all_uses(NodeId old_id, NodeId new_id) {
     }
 }
 
+bool Graph::replace_one_use(NodeId old_id, NodeId new_id, NodeId user, std::size_t slot) {
+    if (!user.valid() || user.value > nodes_.size()) return false;
+    Node& n = nodes_[user.value - 1];
+    if (n.is_dead()) return false;
+    EdgeSlice s = n.data_inputs;
+    if (slot >= s.count) return false;
+    auto inputs = edge_pool_.get_mut(s.first_edge, s.count);
+    if (inputs[slot] == old_id) {
+        inputs[slot] = new_id;
+        return true;
+    }
+    return false;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Debug printing
 // ─────────────────────────────────────────────────────────────────────────────
