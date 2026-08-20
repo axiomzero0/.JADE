@@ -682,56 +682,19 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
 
             case NodeKind::IfTrue:
                 // No code emitted here. The block leader label was already
-                // bound at the start of the block (in the RPO walk). If we
-                // somehow hit this in linear-fallback mode, bind the label
-                // if it exists.
-                {
-                    auto it = impl_->block_labels.find(id.value);
-                    if (it != impl_->block_labels.end()) {
-                        a.bind(it->second);
-                    }
-                }
+                // bound at the start of the block (in the RPO walk).
+                // Do NOT re-bind here — asmjit treats double-binding as an error.
                 break;
 
             case NodeKind::IfFalse:
-                // In block-scheduled mode, the IfFalse block's label is bound
-                // at the start of its block. We don't need to emit a jmp to
-                // a merge label here — fall-through is fine because the IfFalse
-                // block is a separate block in RPO and the If already emitted
-                // `jmp false_label` to skip the true block.
-                //
-                // However, if the IfFalse block is immediately followed by
-                // another block that's a merge point, the previous block's
-                // terminator (Return / Throw / Jump) handles the control flow.
-                // For a block that falls through without a terminator, we
-                // need an explicit `jmp merge_label`. We don't know the
-                // merge label here, so we rely on the block having a Jump
-                // terminator (which is emitted as `jmp target_label`).
-                {
-                    auto it = impl_->block_labels.find(id.value);
-                    if (it != impl_->block_labels.end()) {
-                        a.bind(it->second);
-                    }
-                }
+                // No code emitted here. The block leader label was already
+                // bound at the start of the block (in the RPO walk).
+                // Do NOT re-bind here — asmjit treats double-binding as an error.
                 break;
 
             case NodeKind::Jump: {
-                // Unconditional jump. The target is the block whose leader
-                // is the next node in control flow (i.e., the block whose
-                // leader is the Jump's ctrl-output target).
-                //
-                // We don't have explicit Jump targets in the current IR
-                // (the Jump node has no data input pointing to its target).
-                // For loops, the Jump targets the Loop header node — we
-                // look that up by scanning for a Loop node whose ctrl_input
-                // comes from this Jump's block.
-                //
-                // For now: scan all blocks for one whose leader is a Loop
-                // node, and if this Jump's block is in the same loop body,
-                // emit `jmp loop_header_label`.
-                //
-                // Simpler approach: if the next block in RPO is not the
-                // natural fall-through, emit a jmp to its label.
+                // Unconditional jump — the back-edge of a loop.
+                // Find the Loop header block and emit `jmp loop_header_label`.
                 Label target = a.new_label();
                 bool found = false;
                 for (auto& bb : block_struct.blocks) {
@@ -747,7 +710,6 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
                 if (found) {
                     a.jmp(target);
                 }
-                // If no target found, this is a fall-through Jump — no code.
                 break;
             }
 

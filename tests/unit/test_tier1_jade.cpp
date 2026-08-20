@@ -923,3 +923,258 @@ TEST(JadeJitTest, LoopHeaderLabelBoundCorrectly) {
     auto fn = reinterpret_cast<JitFunc>(r->entry_point);
     EXPECT_EQ(fn(), 42);
 }
+
+// ── Real loop iteration tests ────────────────────────────────────────────────
+//
+// These tests exercise the Loop/Jump back-edge machinery with actual iteration.
+// The trick: we use memory-based locals (StLoc/LdLoc) which read/write the
+// frame slot directly. The Loop header is just a label; the Jump at the end
+// of the body emits `jmp loop_header_label`.
+//
+// IMPORTANT: loop-invariant values (like the loop bound N) MUST be stored in
+// locals, not used as raw ConstInt nodes. The current LSRA doesn't account
+// for loop back-edges, so a ConstInt in Block 0 whose register gets reused
+// by the loop body would be clobbered. Storing it in a local (memory) keeps
+// it safe across iterations.
+
+TEST(JadeJitTest, CountToFiveLoop) {
+    // i = 0; N = 5;
+    // while (i < N) { i = i + 1; }
+    // return i;   // 5
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+
+    // StLoc(i, 0) — local 0
+    auto zero  = b.const_int(0);
+    auto st_i0 = g.create(NodeKind::StLoc);
+    NodeId st_i0_in[] = {zero}; g.set_data_inputs(st_i0, st_i0_in);
+    g.set_effect_input(st_i0, start);
+    g.side(st_i0).class_id = 0;
+
+    // StLoc(N, 5) — local 1 (loop-invariant, stored in memory)
+    auto five  = b.const_int(5);
+    auto st_n  = g.create(NodeKind::StLoc);
+    NodeId st_n_in[] = {five}; g.set_data_inputs(st_n, st_n_in);
+    g.set_effect_input(st_n, st_i0);
+    g.side(st_n).class_id = 1;
+
+    // Loop header
+    auto loop_hdr = g.create(NodeKind::Loop);
+    g.set_ctrl_input(loop_hdr, start);
+    g.set_effect_input(loop_hdr, st_n);
+
+    // LdLoc(i), LdLoc(N), Lt(i, N)
+    auto ld_i = g.create(NodeKind::LdLoc);
+    g.side(ld_i).class_id = 0;
+    auto ld_n = g.create(NodeKind::LdLoc);
+    g.side(ld_n).class_id = 1;
+    NodeId lt_in[] = {ld_i, ld_n};
+    auto lt = g.create(NodeKind::Lt, lt_in);
+
+    // If(lt)
+    auto if_node = b.if_node(lt);
+    g.set_ctrl_input(if_node, loop_hdr);
+    g.set_effect_input(if_node, loop_hdr);
+
+    // IfFalse → exit: return i
+    auto iffalse = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto ld_i_exit = g.create(NodeKind::LdLoc);
+    g.side(ld_i_exit).class_id = 0;
+    auto ret = b.return_node(ld_i_exit);
+    g.set_ctrl_input(ret, iffalse);
+    g.set_effect_input(ret, iffalse);
+
+    // IfTrue → body: i = i + 1; jump back
+    auto iftrue = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+    auto ld_i_body = g.create(NodeKind::LdLoc);
+    g.side(ld_i_body).class_id = 0;
+    auto one = b.const_int(1);
+    NodeId add_in[] = {ld_i_body, one};
+    auto add = g.create(NodeKind::Add, add_in);
+    auto st_i = g.create(NodeKind::StLoc);
+    NodeId st_i_in[] = {add}; g.set_data_inputs(st_i, st_i_in);
+    g.set_ctrl_input(st_i, iftrue);
+    g.set_effect_input(st_i, iftrue);
+    g.side(st_i).class_id = 0;
+
+    // Jump back-edge → loop header
+    auto jump = g.create(NodeKind::Jump);
+    g.set_ctrl_input(jump, st_i);
+    g.set_effect_input(jump, st_i);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 5);
+}
+
+TEST(JadeJitTest, SumOneToTenLoop) {
+    // sum = 0; i = 0; N = 10;
+    // while (i < N) { sum = sum + i; i = i + 1; }
+    // return sum;   // 0+1+2+...+9 = 45
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+
+    // StLoc(sum, 0) — local 0
+    auto zero_a = b.const_int(0);
+    auto st_sum0 = g.create(NodeKind::StLoc);
+    NodeId st_sum0_in[] = {zero_a}; g.set_data_inputs(st_sum0, st_sum0_in);
+    g.set_effect_input(st_sum0, start);
+    g.side(st_sum0).class_id = 0;
+
+    // StLoc(i, 0) — local 1
+    auto zero_b = b.const_int(0);
+    auto st_i0 = g.create(NodeKind::StLoc);
+    NodeId st_i0_in[] = {zero_b}; g.set_data_inputs(st_i0, st_i0_in);
+    g.set_effect_input(st_i0, st_sum0);
+    g.side(st_i0).class_id = 1;
+
+    // StLoc(N, 10) — local 2 (loop-invariant)
+    auto ten_val = b.const_int(10);
+    auto st_n = g.create(NodeKind::StLoc);
+    NodeId st_n_in[] = {ten_val}; g.set_data_inputs(st_n, st_n_in);
+    g.set_effect_input(st_n, st_i0);
+    g.side(st_n).class_id = 2;
+
+    // Loop header
+    auto loop_hdr = g.create(NodeKind::Loop);
+    g.set_ctrl_input(loop_hdr, start);
+    g.set_effect_input(loop_hdr, st_n);
+
+    // LdLoc(i), LdLoc(N), Lt(i, N)
+    auto ld_i_cmp = g.create(NodeKind::LdLoc);
+    g.side(ld_i_cmp).class_id = 1;
+    auto ld_n = g.create(NodeKind::LdLoc);
+    g.side(ld_n).class_id = 2;
+    NodeId lt_in[] = {ld_i_cmp, ld_n};
+    auto lt = g.create(NodeKind::Lt, lt_in);
+
+    // If(lt)
+    auto if_node = b.if_node(lt);
+    g.set_ctrl_input(if_node, loop_hdr);
+    g.set_effect_input(if_node, loop_hdr);
+
+    // IfFalse → exit: return sum
+    auto iffalse = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto ld_sum_exit = g.create(NodeKind::LdLoc);
+    g.side(ld_sum_exit).class_id = 0;
+    auto ret = b.return_node(ld_sum_exit);
+    g.set_ctrl_input(ret, iffalse);
+    g.set_effect_input(ret, iffalse);
+
+    // IfTrue → body
+    auto iftrue = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+
+    // sum = sum + i
+    auto ld_sum = g.create(NodeKind::LdLoc);
+    g.side(ld_sum).class_id = 0;
+    auto ld_i_body = g.create(NodeKind::LdLoc);
+    g.side(ld_i_body).class_id = 1;
+    NodeId add_sum_in[] = {ld_sum, ld_i_body};
+    auto add_sum = g.create(NodeKind::Add, add_sum_in);
+    auto st_sum = g.create(NodeKind::StLoc);
+    NodeId st_sum_in[] = {add_sum}; g.set_data_inputs(st_sum, st_sum_in);
+    g.set_ctrl_input(st_sum, iftrue);
+    g.set_effect_input(st_sum, iftrue);
+    g.side(st_sum).class_id = 0;
+
+    // i = i + 1
+    auto ld_i_inc = g.create(NodeKind::LdLoc);
+    g.side(ld_i_inc).class_id = 1;
+    auto one = b.const_int(1);
+    NodeId add_i_in[] = {ld_i_inc, one};
+    auto add_i = g.create(NodeKind::Add, add_i_in);
+    auto st_i = g.create(NodeKind::StLoc);
+    NodeId st_i_in[] = {add_i}; g.set_data_inputs(st_i, st_i_in);
+    g.set_effect_input(st_i, st_sum);
+    g.side(st_i).class_id = 1;
+
+    // Jump back-edge → loop header
+    auto jump = g.create(NodeKind::Jump);
+    g.set_ctrl_input(jump, st_i);
+    g.set_effect_input(jump, st_i);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 45);
+}
+
+TEST(JadeJitTest, CountToHundredLoop) {
+    // i = 0; N = 100;
+    // while (i < N) { i = i + 1; }
+    // return i;   // 100
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+
+    // StLoc(i, 0) — local 0
+    auto zero  = b.const_int(0);
+    auto st_i0 = g.create(NodeKind::StLoc);
+    NodeId st_i0_in[] = {zero}; g.set_data_inputs(st_i0, st_i0_in);
+    g.set_effect_input(st_i0, start);
+    g.side(st_i0).class_id = 0;
+
+    // StLoc(N, 100) — local 1 (loop-invariant)
+    auto hundred_val = b.const_int(100);
+    auto st_n = g.create(NodeKind::StLoc);
+    NodeId st_n_in[] = {hundred_val}; g.set_data_inputs(st_n, st_n_in);
+    g.set_effect_input(st_n, st_i0);
+    g.side(st_n).class_id = 1;
+
+    // Loop header
+    auto loop_hdr = g.create(NodeKind::Loop);
+    g.set_ctrl_input(loop_hdr, start);
+    g.set_effect_input(loop_hdr, st_n);
+
+    // LdLoc(i), LdLoc(N), Lt(i, N)
+    auto ld_i = g.create(NodeKind::LdLoc);
+    g.side(ld_i).class_id = 0;
+    auto ld_n = g.create(NodeKind::LdLoc);
+    g.side(ld_n).class_id = 1;
+    NodeId lt_in[] = {ld_i, ld_n};
+    auto lt = g.create(NodeKind::Lt, lt_in);
+
+    auto if_node = b.if_node(lt);
+    g.set_ctrl_input(if_node, loop_hdr);
+    g.set_effect_input(if_node, loop_hdr);
+
+    auto iffalse = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto ld_i_exit = g.create(NodeKind::LdLoc);
+    g.side(ld_i_exit).class_id = 0;
+    auto ret = b.return_node(ld_i_exit);
+    g.set_ctrl_input(ret, iffalse);
+    g.set_effect_input(ret, iffalse);
+
+    auto iftrue = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+    auto ld_i_body = g.create(NodeKind::LdLoc);
+    g.side(ld_i_body).class_id = 0;
+    auto one = b.const_int(1);
+    NodeId add_in[] = {ld_i_body, one};
+    auto add = g.create(NodeKind::Add, add_in);
+    auto st_i = g.create(NodeKind::StLoc);
+    NodeId st_i_in[] = {add}; g.set_data_inputs(st_i, st_i_in);
+    g.set_ctrl_input(st_i, iftrue);
+    g.set_effect_input(st_i, iftrue);
+    g.side(st_i).class_id = 0;
+
+    auto jump = g.create(NodeKind::Jump);
+    g.set_ctrl_input(jump, st_i);
+    g.set_effect_input(jump, st_i);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 100);
+}

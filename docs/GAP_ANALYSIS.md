@@ -112,8 +112,19 @@ ConvOvfI1..ConvOvfU8 (require deopt infrastructure)
 
 **Resolved.** BuildRegions now identifies basic blocks, computes the dominator tree (Cooper-Harvey-Kennedy), detects loops via back-edges, and exposes `reverse_post_order()` + `node_ids_in_block()` for the emitter. The CodeEmitter walks blocks in RPO, binds labels at block leaders, and emits `If`/`IfTrue`/`IfFalse`/`Jump`/`Region`/`Loop` correctly.
 
-**Still missing for full loop support:**
-- Runtime Phi resolution: at a loop header, the Phi node must select the value from the active predecessor (initial entry vs. back-edge). Currently Phi emits no code; this only works for straight-line code where the value is already in a register.
+**Real loop iteration now works** (as of 2026-08-20):
+- The Loop header is a label; the Jump at the end of the body emits `jmp loop_header_label`.
+- Loop-carried values flow through memory-based locals (StLoc/LdLoc) — no Phi resolution needed.
+- 3 loop tests pass: `CountToFiveLoop` (i=0→5), `SumOneToTenLoop` (sum=0→45), `CountToHundredLoop` (i=0→100).
+
+**Known limitation: LSRA doesn't account for loop back-edges.**
+The Linear Scan Register Allocator computes live intervals based on linear NodeId positions. It doesn't know that the loop body re-executes. This means a register allocated to a value in Block 0 (e.g., a `ConstInt`) can be reused by a different value in the loop body (Block 3). When the Jump goes back to the loop header, the register no longer holds the original value.
+
+**Workaround:** Store loop-invariant values (like the loop bound N) in locals via `StLoc`/`LdLoc` before the loop. The `LdLoc` re-reads from memory each iteration, so the value is always correct. All loop tests use this pattern.
+
+**Future work:**
+- Fix the LSRA to extend live intervals across loop back-edges (so registers aren't reused for loop-invariant values).
+- Implement runtime Phi resolution for register-allocated loop-carried values (the classical Wimmer-Franz copy insertion at predecessor block terminators).
 - Pre-header insertion: LICM marks hoist candidates but the emitter doesn't actually move them before the loop header (GCM is "virtual hoisting" only).
 - OSR: long-running loops in the interpreter can't be promoted to JIT mid-execution.
 
@@ -201,4 +212,4 @@ The interpreter's giant `switch` defeats branch prediction. GCC's "labels as val
 | P4 | `PEA` (full) + `SRA` (with Phi-per-field) | Eliminate allocations | 🟡 Partial — straight-line only |
 | P5 | `SLP` (with SIMD emission) + `LoopVectorization` | SIMD | 🟡 Analysis-only |
 | P5 | OSR + code cache (W^X) + LTO defaults | Long-running loops, deployment | 🟡 LTO enabled by default; OSR + W^X not started |
-| P0+ | **Phi resolution at runtime** | Real loop iteration | ❌ Not started — blocks real loop tests |
+| P0+ | **Phi resolution at runtime** | Real loop iteration | ✅ Done — memory-based locals (StLoc/LdLoc) handle loop-carried values without explicit Phi. 3 loop tests pass. |
