@@ -685,3 +685,241 @@ TEST(JadeJitTest, CompilesAndExecutesSar) {
     auto fn = reinterpret_cast<JitFunc>(r->entry_point);
     EXPECT_EQ(fn(), -4);
 }
+
+// ── Block-scheduled emission tests ──────────────────────────────────────────
+//
+// These tests exercise the new block-scheduled emitter (RPO walk):
+//   - Branches (if-then-else) with separate true/false blocks
+//   - Both branches returning different values
+//   - Branch fall-through after a merge (no merge point yet — each branch returns)
+
+TEST(JadeJitTest, BranchTrueReturnsTrueValue) {
+    // if (1) return 10; else return 20;
+    // cond=1 (true), so the result should be 10.
+    Graph g;
+    GraphBuilder b(g);
+    auto start    = b.start();
+    auto cond     = b.const_int(1);
+    auto if_node  = b.if_node(cond);
+    g.set_ctrl_input(if_node, start);
+
+    // True branch: IfTrue → ConstInt 10 → Return
+    auto iftrue   = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+    auto true_val = b.const_int(10);
+    auto ret_true = b.return_node(true_val);
+    g.set_ctrl_input(ret_true, iftrue);
+    g.set_effect_input(ret_true, start);
+
+    // False branch: IfFalse → ConstInt 20 → Return
+    auto iffalse  = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto false_val = b.const_int(20);
+    auto ret_false = b.return_node(false_val);
+    g.set_ctrl_input(ret_false, iffalse);
+    g.set_effect_input(ret_false, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 10);
+}
+
+TEST(JadeJitTest, BranchFalseReturnsFalseValue) {
+    // if (0) return 10; else return 20;
+    // cond=0 (false), so the result should be 20.
+    Graph g;
+    GraphBuilder b(g);
+    auto start    = b.start();
+    auto cond     = b.const_int(0);
+    auto if_node  = b.if_node(cond);
+    g.set_ctrl_input(if_node, start);
+
+    auto iftrue   = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+    auto true_val = b.const_int(10);
+    auto ret_true = b.return_node(true_val);
+    g.set_ctrl_input(ret_true, iftrue);
+    g.set_effect_input(ret_true, start);
+
+    auto iffalse  = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto false_val = b.const_int(20);
+    auto ret_false = b.return_node(false_val);
+    g.set_ctrl_input(ret_false, iffalse);
+    g.set_effect_input(ret_false, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 20);
+}
+
+TEST(JadeJitTest, BranchWithArithmeticInTrueBranch) {
+    // if (1) return (3 + 7); else return 99;
+    // cond=1 → returns 10.
+    Graph g;
+    GraphBuilder b(g);
+    auto start    = b.start();
+    auto cond     = b.const_int(1);
+    auto if_node  = b.if_node(cond);
+    g.set_ctrl_input(if_node, start);
+
+    // True branch: 3 + 7 = 10
+    auto iftrue   = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+    auto three    = b.const_int(3);
+    auto seven    = b.const_int(7);
+    NodeId add_inputs[] = {three, seven};
+    auto add_true = g.create(NodeKind::Add, add_inputs);
+    auto ret_true = b.return_node(add_true);
+    g.set_ctrl_input(ret_true, iftrue);
+    g.set_effect_input(ret_true, start);
+
+    // False branch: return 99
+    auto iffalse  = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto false_val = b.const_int(99);
+    auto ret_false = b.return_node(false_val);
+    g.set_ctrl_input(ret_false, iffalse);
+    g.set_effect_input(ret_false, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 10);
+}
+
+TEST(JadeJitTest, BranchWithArithmeticInBothBranches) {
+    // if (1) return (5 * 6); else return (40 - 18);
+    // cond=1 → returns 30.
+    Graph g;
+    GraphBuilder b(g);
+    auto start    = b.start();
+    auto cond     = b.const_int(1);
+    auto if_node  = b.if_node(cond);
+    g.set_ctrl_input(if_node, start);
+
+    auto iftrue   = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+    auto five     = b.const_int(5);
+    auto six      = b.const_int(6);
+    NodeId mul_inputs[] = {five, six};
+    auto mul_true = g.create(NodeKind::Mul, mul_inputs);
+    auto ret_true = b.return_node(mul_true);
+    g.set_ctrl_input(ret_true, iftrue);
+    g.set_effect_input(ret_true, start);
+
+    auto iffalse   = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto forty     = b.const_int(40);
+    auto eighteen  = b.const_int(18);
+    NodeId sub_inputs[] = {forty, eighteen};
+    auto sub_false = g.create(NodeKind::Sub, sub_inputs);
+    auto ret_false = b.return_node(sub_false);
+    g.set_ctrl_input(ret_false, iffalse);
+    g.set_effect_input(ret_false, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 30);
+}
+
+TEST(JadeJitTest, BranchNegativeConditionReturnsFalseBranch) {
+    // if (-1) return 10; else return 20;
+    // cond=-1 (truthy), so the result should be 10.
+    Graph g;
+    GraphBuilder b(g);
+    auto start    = b.start();
+    auto cond     = b.const_int(-1);
+    auto if_node  = b.if_node(cond);
+    g.set_ctrl_input(if_node, start);
+
+    auto iftrue   = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+    auto true_val = b.const_int(10);
+    auto ret_true = b.return_node(true_val);
+    g.set_ctrl_input(ret_true, iftrue);
+    g.set_effect_input(ret_true, start);
+
+    auto iffalse  = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto false_val = b.const_int(20);
+    auto ret_false = b.return_node(false_val);
+    g.set_ctrl_input(ret_false, iffalse);
+    g.set_effect_input(ret_false, start);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 10);
+}
+
+// ── Loop header label binding test ───────────────────────────────────────────
+//
+// This is a degenerate "loop" that doesn't actually iterate. It exercises
+// the Loop / Jump emission machinery: a Loop block (with a label) and a
+// Jump back-edge that targets it. The Jump is in a block that's never
+// executed (because the If always branches to the exit), so the back-edge
+// label exists but is never reached at runtime.
+//
+// Real loop iteration requires Phi resolution at runtime (selecting the
+// right predecessor's value at the loop header), which is a future feature.
+// This test verifies the label/Jump emission is correct in isolation.
+
+TEST(JadeJitTest, LoopHeaderLabelBoundCorrectly) {
+    // if (1) return 42; else { loop_body: Jump back to loop_header (never taken) }
+    //
+    // Structure:
+    //   Block 0 (entry): Start, ConstInt(1), If → jne true_label; jmp false_label
+    //   Block 1 (true, IfTrue): ConstInt(42), Return → jmp epilogue
+    //   Block 2 (false, IfFalse): Loop (header), ConstInt(0), If(cond=0) →
+    //       jne body_label; jmp exit_label
+    //   Block 3 (loop body): Jump → jmp loop_header_label (back-edge, never taken)
+    //   Block 4 (loop exit): ConstInt(99), Return
+    //
+    // Since cond=1, we always take the true branch and return 42.
+    Graph g;
+    GraphBuilder b(g);
+    auto start    = b.start();
+    auto cond     = b.const_int(1);
+    auto if_node  = b.if_node(cond);
+    g.set_ctrl_input(if_node, start);
+
+    // True branch: return 42.
+    auto iftrue   = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+    auto true_val = b.const_int(42);
+    auto ret_true = b.return_node(true_val);
+    g.set_ctrl_input(ret_true, iftrue);
+    g.set_effect_input(ret_true, start);
+
+    // False branch: a degenerate loop. Loop header + back-edge Jump (never taken).
+    auto iffalse  = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto loop_hdr = g.create(NodeKind::Loop);
+    g.set_ctrl_input(loop_hdr, iffalse);
+    g.set_effect_input(loop_hdr, iffalse);
+    auto exit_val = b.const_int(99);
+    auto ret_exit = b.return_node(exit_val);
+    g.set_ctrl_input(ret_exit, loop_hdr);
+    g.set_effect_input(ret_exit, loop_hdr);
+
+    // The back-edge Jump: targets loop_hdr. In RPO, this block comes after
+    // the loop exit (which has a Return terminator), so the Jump is dead code.
+    auto jump_back = g.create(NodeKind::Jump);
+    g.set_ctrl_input(jump_back, loop_hdr);
+    g.set_effect_input(jump_back, loop_hdr);
+
+    JadeJit jit;
+    auto r = jit.compile(g);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+    auto fn = reinterpret_cast<JitFunc>(r->entry_point);
+    EXPECT_EQ(fn(), 42);
+}

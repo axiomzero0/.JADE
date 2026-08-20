@@ -74,6 +74,17 @@ struct BlockStructure {
     }
 
     [[nodiscard]] uint32_t num_blocks() const noexcept { return blocks.size(); }
+
+    // Reverse post-order traversal of the blocks. Block 0 is the entry.
+    // Returns block IDs in RPO order. Back-edges are skipped during DFS
+    // so loop bodies are visited in source order.
+    [[nodiscard]] std::vector<uint32_t> reverse_post_order() const;
+
+    // Iterate NodeIds in this block, in NodeId order.
+    // The block's leader/last fields define a contiguous range [leader, last]
+    // (since identify_blocks walks NodeId order), so we just enumerate
+    // integers in that range and skip dead nodes.
+    [[nodiscard]] std::vector<uint32_t> node_ids_in_block(const Graph& g, uint32_t block_id) const;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

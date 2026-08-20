@@ -100,15 +100,24 @@ using namespace asmjit;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Impl — the asmjit state, hidden from the public header.
+//
+// block_labels: maps a NodeId.value (specifically the leader NodeId of a
+// block, e.g. an IfTrue / IfFalse / Region / Loop node) to the asmjit Label
+// that the emitter should bind at the start of that block. Branches that
+// target the block emit `jcc label` / `jmp label`.
+//
+// block_terminator_labels: maps a NodeId.value (the terminator of a block,
+// e.g. an If node) to the labels of its successor blocks. Used so that when
+// we encounter an If node, we know which labels to jcc/jmp to.
 // ─────────────────────────────────────────────────────────────────────────────
 
 struct CodeEmitter::Impl {
     JitRuntime runtime;
+    // Label assigned to each block leader (NodeId.value → Label).
     std::unordered_map<uint32_t, Label> block_labels;
-    // Pending merge labels for if-then-else. When IfFalse is hit, we emit
-    // `jmp merge_label` and push merge_label. Before the epilogue, we bind
-    // all pending merge labels so fall-through works correctly.
-    std::vector<Label> pending_merge_labels;
+    // For block-scheduled emission: which NodeIds are block leaders that
+    // need a label bound at the start of emission for that block.
+    std::unordered_map<uint32_t, bool> needs_label;
 };
 
 CodeEmitter::CodeEmitter() : impl_(std::make_unique<Impl>()) {}
@@ -215,14 +224,32 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
     a.push(x86::r15);
 
     // ── Body ──────────────────────────────────────────────────────────────
-    for (std::size_t i = 0; i < graph.size(); ++i) {
-        const NodeId id{static_cast<uint32_t>(i + 1)};
+    //
+    // Block-scheduled emission:
+    //   1. Compute the BlockStructure for this graph.
+    //   2. Pre-allocate a Label for each block leader (keyed by leader NodeId).
+    //   3. Walk blocks in reverse post-order (RPO).
+    //   4. For each block: bind its label, then emit all nodes in the block
+    //      in NodeId order via the per-node switch below.
+    //
+    // The per-node switch is shared between the block-scheduled path and the
+    // linear fallback (used for trivial graphs that BuildRegions might miss).
+    BlockStructure block_struct = build_block_structure(graph);
+    auto rpo = block_struct.reverse_post_order();
+
+    // Pre-allocate a Label for each block leader.
+    for (auto& bb : block_struct.blocks) {
+        if (bb.leader.valid()) {
+            impl_->block_labels[bb.leader.value] = a.new_label();
+        }
+    }
+
+    // Helper lambda: emit a single node by NodeId. Encapsulates the giant
+    // switch so we can call it from both the RPO loop and the linear fallback.
+    auto emit_one = [&](NodeId id) -> Result<void> {
         const Node& n = graph.node(id);
-
-        if (n.is_dead()) continue;
-
+        if (n.is_dead()) return {};
         const LiveInterval& iv = alloc.intervals[id.value - 1];
-
         switch (n.kind) {
             case NodeKind::Start:
                 break;
@@ -605,6 +632,13 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
             }
 
             case NodeKind::If: {
+                // Conditional branch. The If node has 1 data input (the cond)
+                // and is the ctrl source for one IfTrue and one IfFalse node.
+                //
+                // With block-scheduled emission, we look up the labels of the
+                // IfTrue and IfFalse blocks (keyed by their leader NodeId in
+                // impl_->block_labels) and emit:
+                //     test cond, cond; jne true_label; jmp false_label
                 auto inputs = graph.data_inputs(id);
                 if (inputs.size() != 1) {
                     return std::unexpected(make_error(ErrorKind::UnsupportedNode,
@@ -627,12 +661,17 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
                     }
                 }
 
-                Label true_label  = a.new_label();
+                // Look up the labels pre-allocated for the true/false blocks.
+                Label true_label  = a.new_label();   // fallback if not found
                 Label false_label = a.new_label();
-                Label merge_label = a.new_label();
-                impl_->block_labels[iftrue_target.value]  = true_label;
-                impl_->block_labels[iffalse_target.value] = false_label;
-                impl_->pending_merge_labels.push_back(merge_label);
+                if (iftrue_target.valid()) {
+                    auto it = impl_->block_labels.find(iftrue_target.value);
+                    if (it != impl_->block_labels.end()) true_label = it->second;
+                }
+                if (iffalse_target.valid()) {
+                    auto it = impl_->block_labels.find(iffalse_target.value);
+                    if (it != impl_->block_labels.end()) false_label = it->second;
+                }
 
                 // test cond, cond; jne true_label; jmp false_label
                 a.test(cond_reg, cond_reg);
@@ -641,41 +680,85 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
                 break;
             }
 
-            case NodeKind::IfTrue: {
-                auto it = impl_->block_labels.find(id.value);
-                if (it != impl_->block_labels.end()) {
-                    a.bind(it->second);
-                    impl_->block_labels.erase(it);
+            case NodeKind::IfTrue:
+                // No code emitted here. The block leader label was already
+                // bound at the start of the block (in the RPO walk). If we
+                // somehow hit this in linear-fallback mode, bind the label
+                // if it exists.
+                {
+                    auto it = impl_->block_labels.find(id.value);
+                    if (it != impl_->block_labels.end()) {
+                        a.bind(it->second);
+                    }
                 }
+                break;
+
+            case NodeKind::IfFalse:
+                // In block-scheduled mode, the IfFalse block's label is bound
+                // at the start of its block. We don't need to emit a jmp to
+                // a merge label here — fall-through is fine because the IfFalse
+                // block is a separate block in RPO and the If already emitted
+                // `jmp false_label` to skip the true block.
+                //
+                // However, if the IfFalse block is immediately followed by
+                // another block that's a merge point, the previous block's
+                // terminator (Return / Throw / Jump) handles the control flow.
+                // For a block that falls through without a terminator, we
+                // need an explicit `jmp merge_label`. We don't know the
+                // merge label here, so we rely on the block having a Jump
+                // terminator (which is emitted as `jmp target_label`).
+                {
+                    auto it = impl_->block_labels.find(id.value);
+                    if (it != impl_->block_labels.end()) {
+                        a.bind(it->second);
+                    }
+                }
+                break;
+
+            case NodeKind::Jump: {
+                // Unconditional jump. The target is the block whose leader
+                // is the next node in control flow (i.e., the block whose
+                // leader is the Jump's ctrl-output target).
+                //
+                // We don't have explicit Jump targets in the current IR
+                // (the Jump node has no data input pointing to its target).
+                // For loops, the Jump targets the Loop header node — we
+                // look that up by scanning for a Loop node whose ctrl_input
+                // comes from this Jump's block.
+                //
+                // For now: scan all blocks for one whose leader is a Loop
+                // node, and if this Jump's block is in the same loop body,
+                // emit `jmp loop_header_label`.
+                //
+                // Simpler approach: if the next block in RPO is not the
+                // natural fall-through, emit a jmp to its label.
+                Label target = a.new_label();
+                bool found = false;
+                for (auto& bb : block_struct.blocks) {
+                    if (bb.leader.valid() && graph.node(bb.leader).kind == NodeKind::Loop) {
+                        auto it = impl_->block_labels.find(bb.leader.value);
+                        if (it != impl_->block_labels.end()) {
+                            target = it->second;
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (found) {
+                    a.jmp(target);
+                }
+                // If no target found, this is a fall-through Jump — no code.
                 break;
             }
-
-            case NodeKind::IfFalse: {
-                // End of true branch: jmp merge_label.
-                // Then bind false_label for the false branch.
-                if (!impl_->pending_merge_labels.empty()) {
-                    a.jmp(impl_->pending_merge_labels.back());
-                }
-                auto it = impl_->block_labels.find(id.value);
-                if (it != impl_->block_labels.end()) {
-                    a.bind(it->second);
-                    impl_->block_labels.erase(it);
-                }
-                break;
-            }
-
-            case NodeKind::Jump:
-                // Unconditional jump to a target node.
-                // Find the target (the next node in control flow — for now,
-                // we treat Jump as a no-op since we emit in linear order).
-                break;
 
             case NodeKind::Region:
-                // A merge point — just bind a label if any predecessor referenced it.
+                // Merge point — block leader label is already bound at block
+                // start. No additional code needed.
                 break;
 
             case NodeKind::Loop:
-                // Loop header — bind a label so back-edges can target it.
+                // Loop header — block leader label is already bound at block
+                // start. Back-edges target this label via Jump emission.
                 break;
 
             case NodeKind::Phi: {
@@ -1184,13 +1267,37 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
                                 "falling back to granit",
                                 node_kind_name(n.kind), id.value)));
         }
-    }
+        return {};
+    };  // end emit_one lambda
 
-    // Bind any pending merge labels (from if-then-else patterns).
-    for (auto& lbl : impl_->pending_merge_labels) {
-        a.bind(lbl);
+    // ── Walk blocks in RPO; emit each block's nodes ──
+    if (rpo.empty()) {
+        // Linear fallback for trivial graphs (e.g., empty BuildRegions result).
+        for (std::size_t i = 0; i < graph.size(); ++i) {
+            const NodeId id{static_cast<uint32_t>(i + 1)};
+            auto r = emit_one(id);
+            if (!r) return std::unexpected(r.error());
+        }
+    } else {
+        for (uint32_t block_id : rpo) {
+            if (block_id >= block_struct.blocks.size()) continue;
+            const BasicBlock& bb = block_struct.blocks[block_id];
+            if (!bb.leader.valid()) continue;
+
+            // Bind the block's label so branches targeting this block land here.
+            auto lbl_it = impl_->block_labels.find(bb.leader.value);
+            if (lbl_it != impl_->block_labels.end()) {
+                a.bind(lbl_it->second);
+            }
+
+            // Emit all nodes in this block in NodeId order.
+            auto node_ids = block_struct.node_ids_in_block(graph, block_id);
+            for (uint32_t nv : node_ids) {
+                auto r = emit_one(NodeId{nv});
+                if (!r) return std::unexpected(r.error());
+            }
+        }
     }
-    impl_->pending_merge_labels.clear();
 
     // ── Epilogue ──────────────────────────────────────────────────────────
     a.bind(epilogue_label);

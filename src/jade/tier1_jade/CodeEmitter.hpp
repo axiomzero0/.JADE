@@ -13,6 +13,7 @@
 
 #include "jade/core/Result.hpp"
 #include "jade/ir/Graph.hpp"
+#include "jade/ir/passes/BuildRegions.hpp"
 #include "jade/tier1_jade/LinearScanRegAlloc.hpp"
 
 #include <cstddef>

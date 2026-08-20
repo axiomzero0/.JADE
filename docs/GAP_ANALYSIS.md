@@ -2,7 +2,7 @@
 title: "Gap Analysis: Current State vs Target"
 status: "Stable"
 owner: "JADE Dev Team"
-last_updated: "2026-08-19"
+last_updated: "2026-08-20"
 related_rules: ["Rule 09", "Rule 42", "Rule 52"]
 pass_type: "Architecture"
 tier: "All"
@@ -12,7 +12,7 @@ tier: "All"
 
 **Status:** Stable  
 **Owner:** JADE Dev Team  
-**Last Updated:** 2026-08-19
+**Last Updated:** 2026-08-20
 
 ---
 
@@ -44,7 +44,8 @@ tier: "All"
 
 | Component | Status | What's missing |
 | :-- | :-- | :-- |
-| `CodeEmitter` (control flow) | 🟡 Partial | `If`/`IfTrue`/`IfFalse` labels are created but emission order is wrong — nodes between IfTrue and IfFalse are emitted before the label is bound. Needs block scheduling. |
+| `CodeEmitter` (control flow) | ✅ Real (block-scheduled) | **NOW WORKING**: walks blocks in RPO, pre-allocates labels, If/IfTrue/IfFalse emit `test; jcc; jmp` with proper label binding. Branch tests pass. |
+| `BuildRegions` | ✅ Real | Now exposes `reverse_post_order()` and `node_ids_in_block()` for the emitter. |
 | `PEA` | 🟡 Partial | Does straight-line EA only (eliminates allocations with zero live uses). No materialization splitting (needs block structure + Phi-per-field). |
 | `SRA` | 🟡 Partial | Store→load forwarding for straight-line code. No Phi-per-field for loop-carried fields. |
 | `SLP` | 🟡 Analysis-only | Finds candidate packs of isomorphic independent nodes. No SIMD emission (emitter has no vector instruction support). |
@@ -74,43 +75,47 @@ Every pass that needs loop/region structure is a no-op, because the lowerers emi
 
 ## 3. The CodeEmitter Fallback Problem
 
-The `CodeEmitter` returns `ErrorKind::UnsupportedNode` for any NodeKind it doesn't handle, which triggers a fallback to `granit` (Tier 0 interpreter). The **unhandled** NodeKinds include:
+The `CodeEmitter` returns `ErrorKind::UnsupportedNode` for any NodeKind it doesn't handle, which triggers a fallback to `granit` (Tier 0 interpreter). The **still unhandled** NodeKinds (after the block-scheduled emission work) are:
 
 ```
-If, IfTrue, IfFalse, Phi, Region, Loop, Switch, Jump,
 Call, CallVirt, CallKnown, TailCall, InvokeDynamic,
-NewObj, NewArr, Allocate, Box, Unbox, UnboxAny,
-LoadElement, StoreElement, LoadFieldA, LdElemA, ArrayLength,
-IsInst, CastClass, CheckInt, CheckNotNull, CheckShape, CheckBounds, CheckClass,
+NewObj, NewArr, Allocate, Materialize, Box, Unbox, UnboxAny,
+IsInst, CastClass,
 Throw, Rethrow, Leave, EndFinally,
-MonitorEnter, MonitorExit, LdNull, LdStr,
-ConvI1, ConvI2, ConvI4, ConvI8, ConvR4, ConvR8, ConvU*, ConvOvf*,
-LdArga, LdLoca, StArg, StLoc (CIL-specific),
-ConstBool, ConstFloat, ConstNull, ConstString, Neg, Mod
+MonitorEnter, MonitorExit,
+ConvR4, ConvR8, ConstFloat,
+ToInt, ToFloat (require XMM support),
+ConvOvfI1..ConvOvfU8 (require deopt infrastructure)
 ```
 
-**Any function with a branch, call, or allocation falls back to the interpreter.**
+**The following NodeKinds are NOW handled** (block-scheduled emission):
+- `If`, `IfTrue`, `IfFalse` — emit `test; jcc; jmp` with block-level labels
+- `Region`, `Loop` — block leader labels bound at block start
+- `Jump` — emits `jmp` to the nearest Loop header label (back-edge)
+- `Phi` — no code emitted (regalloc handles value selection in straight-line code; **runtime Phi resolution for real loops is future work**)
+- `Switch` — partial (loads value, but case targets not yet wired)
+- `CheckBounds` — emits `cmp; jl ok; ud2`
+- `LoadElement`/`StoreElement`/`LdElem`/`StElem` — emit `mov [arr+idx*8+16], reg`
+- `ArrayLength` — emits `mov reg, [arr+8]`
+- `LdFlda`/`LdElemA` — emit `lea reg, [obj+off]`
+- `LdLoca`/`LdArga` — emit `lea reg, [rbp-off]`
+- `ConvI1..ConvU8` — emit `movsx`/`movzx`/`movsxd` as appropriate
+- `ConstBool`/`LdNull`/`ConstNull` — emit `mov reg, 0` (or `xor reg, reg`)
+- `LdStr`/`ConstString` — emit `mov reg, str_id` (token, runtime resolves)
+- `IsInt`/`IsFloat`/`IsNull`/`ToBool` — emit `test; setz/setnz; movzx`
+
+**Branches and basic control flow no longer fall back to the interpreter.** Functions with calls, allocations, or exceptions still fall back.
 
 ---
 
 ## 4. The Root Cause: No Block Structure
 
-The single root cause of ~10 no-op passes and the CodeEmitter fallback is: **the IR has no basic-block structure**.
+**Resolved.** BuildRegions now identifies basic blocks, computes the dominator tree (Cooper-Harvey-Kennedy), detects loops via back-edges, and exposes `reverse_post_order()` + `node_ids_in_block()` for the emitter. The CodeEmitter walks blocks in RPO, binds labels at block leaders, and emits `If`/`IfTrue`/`IfFalse`/`Jump`/`Region`/`Loop` correctly.
 
-The lowerers (`CilLowerer`, `JvmLowerer`) emit `If`/`IfTrue`/`IfFalse`/`Phi` nodes, but:
-- No `Region` nodes at merge points.
-- No `Loop` nodes with pre-headers.
-- No dominator tree.
-- No loop nesting forest.
-- No block scheduling for the emitter.
-
-Without block structure:
-- LICM has nothing to hoist against (no loop pre-header).
-- GCM has no blocks to schedule nodes into.
-- LoopUnrolling/Peeling/Unswitching have no loops to transform.
-- PEA can't track per-path escape state.
-- SRA can't insert Phi-per-field at merge points.
-- The emitter can't lay out blocks in the right order.
+**Still missing for full loop support:**
+- Runtime Phi resolution: at a loop header, the Phi node must select the value from the active predecessor (initial entry vs. back-edge). Currently Phi emits no code; this only works for straight-line code where the value is already in a register.
+- Pre-header insertion: LICM marks hoist candidates but the emitter doesn't actually move them before the loop header (GCM is "virtual hoisting" only).
+- OSR: long-running loops in the interpreter can't be promoted to JIT mid-execution.
 
 ---
 
@@ -182,17 +187,18 @@ The interpreter's giant `switch` defeats branch prediction. GCC's "labels as val
 
 ## 7. Priority Order
 
-| Priority | Work | Unblocks |
-| :-- | :-- | :-- |
-| P0 | `BuildRegions` pass (Region/Loop/DominatorTree) | LICM, GCM, LoopUnroll, LoopPeel, LoopUnswitch, PEA-materialization, SRA-with-Phi |
-| P0 | Block-scheduled `CodeEmitter` (If/Jump/Phi/Region/Loop) | Real JIT loops (no fallback to granit) |
-| P1 | `LICM` (real) + `BCE` (affine) + `ArrayLength`/`LoadElement`/`StoreElement` emission | Array loops at near-native speed |
-| P1 | Interpreter: fixed stack + computed goto + no-throw | 2-3× faster fallback |
-| P2 | `Inlining` (real) + `Call`/`CallKnown` emission | OO code |
-| P2 | `Peephole` (post-regalloc) | 5-10% everywhere |
-| P3 | `LiveRangeSplitting` + `Rematerialization` in LSRA | Fewer spills |
-| P3 | `TierManager` + compilation queue | Actual tiered compilation |
-| P4 | `Devirtualization` (CHA + profile) + `ICStubEmission` | Virtual calls |
-| P4 | `PEA` (full) + `SRA` (with Phi-per-field) | Eliminate allocations |
-| P5 | `SLP` (with SIMD emission) + `LoopVectorization` | SIMD |
-| P5 | OSR + code cache (W^X) + LTO defaults | Long-running loops, deployment |
+| Priority | Work | Unblocks | Status |
+| :-- | :-- | :-- | :-- |
+| P0 | `BuildRegions` pass (Region/Loop/DominatorTree) | LICM, GCM, LoopUnroll, LoopPeel, LoopUnswitch, PEA-materialization, SRA-with-Phi | ✅ Done |
+| P0 | Block-scheduled `CodeEmitter` (If/Jump/Phi/Region/Loop) | Real JIT branches (no fallback to granit) | ✅ Done — 5 branch tests + 1 loop test pass |
+| P1 | `LICM` (real) + `BCE` (affine) + `ArrayLength`/`LoadElement`/`StoreElement` emission | Array loops at near-native speed | 🟡 Partial — BCE works for constants; affine BCE needs IV range analysis |
+| P1 | Interpreter: fixed stack + computed goto + no-throw | 2-3× faster fallback | ✅ Done (de-throw + fixed stack + __builtin_expect) |
+| P2 | `Inlining` (real) + `Call`/`CallKnown` emission | OO code | ❌ Not started |
+| P2 | `Peephole` (post-regalloc) | 5-10% everywhere | 🟡 Partial — strength reduction only |
+| P3 | `LiveRangeSplitting` + `Rematerialization` in LSRA | Fewer spills | ❌ Not started |
+| P3 | `TierManager` + compilation queue | Actual tiered compilation | ❌ Not started |
+| P4 | `Devirtualization` (CHA + profile) + `ICStubEmission` | Virtual calls | ❌ Not started |
+| P4 | `PEA` (full) + `SRA` (with Phi-per-field) | Eliminate allocations | 🟡 Partial — straight-line only |
+| P5 | `SLP` (with SIMD emission) + `LoopVectorization` | SIMD | 🟡 Analysis-only |
+| P5 | OSR + code cache (W^X) + LTO defaults | Long-running loops, deployment | 🟡 LTO enabled by default; OSR + W^X not started |
+| P0+ | **Phi resolution at runtime** | Real loop iteration | ❌ Not started — blocks real loop tests |

@@ -276,4 +276,81 @@ BlockStructure build_block_structure(const Graph& graph) {
     return pass.run(graph);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BlockStructure::reverse_post_order
+//
+//   DFS from block 0, skip back-edges, then reverse the post-order.
+//   This is the canonical "RPO" traversal used by every block-scheduled
+//   emitter and dominator algorithm.
+// ─────────────────────────────────────────────────────────────────────────────
+
+std::vector<uint32_t> BlockStructure::reverse_post_order() const {
+    if (blocks.empty()) return {};
+
+    std::vector<uint32_t> post_order;
+    post_order.reserve(blocks.size());
+    std::vector<bool> visited(blocks.size(), false);
+    std::vector<bool> on_stack(blocks.size(), false);
+
+    // Iterative DFS to avoid stack overflow on large graphs.
+    struct Frame { uint32_t block; uint32_t succ_idx; };
+    std::vector<Frame> stack;
+    stack.reserve(blocks.size());
+    stack.push_back({0, 0});
+    visited[0] = true;
+    on_stack[0] = true;
+
+    while (!stack.empty()) {
+        Frame& top = stack.back();
+        if (top.succ_idx >= blocks[top.block].successors.size()) {
+            // All successors processed — post-order visit.
+            post_order.push_back(top.block);
+            on_stack[top.block] = false;
+            stack.pop_back();
+            continue;
+        }
+        uint32_t succ = blocks[top.block].successors[top.succ_idx++];
+        if (succ >= blocks.size()) continue;
+        if (visited[succ]) {
+            // Already visited. If on_stack, it's a back-edge — skip.
+            // Otherwise it's a cross/forward edge — already in post-order.
+            continue;
+        }
+        visited[succ] = true;
+        on_stack[succ] = true;
+        stack.push_back({succ, 0});
+    }
+
+    // Reverse post-order = post-order reversed.
+    std::reverse(post_order.begin(), post_order.end());
+    return post_order;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BlockStructure::node_ids_in_block
+//
+//   Walks [leader.value, last.value] and emits all live NodeIds.
+//   Assumes BuildRegions stored leader/last as NodeId.value ranges
+//   (which it does, because identify_blocks walks nodes in NodeId order).
+// ─────────────────────────────────────────────────────────────────────────────
+
+std::vector<uint32_t> BlockStructure::node_ids_in_block(const Graph& g, uint32_t block_id) const {
+    if (block_id >= blocks.size()) return {};
+    const BasicBlock& bb = blocks[block_id];
+    if (!bb.leader.valid() || !bb.last.valid()) return {};
+
+    std::vector<uint32_t> out;
+    out.reserve(bb.last.value - bb.leader.value + 1);
+    for (uint32_t v = bb.leader.value; v <= bb.last.value; ++v) {
+        if (v == 0 || v > g.size()) continue;
+        NodeId id{v};
+        if (g.node(id).is_dead()) continue;
+        // Verify this node actually belongs to this block (safety check).
+        auto it = node_to_block.find(v);
+        if (it == node_to_block.end() || it->second != block_id) continue;
+        out.push_back(v);
+    }
+    return out;
+}
+
 }  // namespace jade

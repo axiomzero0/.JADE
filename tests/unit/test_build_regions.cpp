@@ -9,6 +9,9 @@
 #include "jade/ir/NodeKind.hpp"
 #include "jade/ir/passes/BuildRegions.hpp"
 
+#include <algorithm>
+#include <set>
+
 using namespace jade;
 
 TEST(BuildRegionsTest, EmptyGraph) {
@@ -180,4 +183,103 @@ TEST(BuildRegionsTest, MultipleReturns) {
     if (ret2_block < bs.num_blocks()) {
         EXPECT_EQ(bs.blocks[ret2_block].successors.size(), 0u);
     }
+}
+
+// ── RPO traversal tests ──────────────────────────────────────────────────────
+
+TEST(BuildRegionsTest, RPOOfLinearGraph) {
+    // Linear graph: Start, ConstInt, Add, Return — should be 1 block.
+    // RPO should be [0].
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(3);
+    auto c = b.const_int(4);
+    auto add = b.add(a, c);
+    auto ret = b.return_node(add);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    auto bs = build_block_structure(g);
+    auto rpo = bs.reverse_post_order();
+    EXPECT_FALSE(rpo.empty());
+    // First block should be the entry (block 0).
+    EXPECT_EQ(rpo.front(), 0u);
+}
+
+TEST(BuildRegionsTest, RPOOfIfThenElseVisitsAllReachableBlocks) {
+    // if (1) return 10; else return 20;
+    // Should have 3 blocks: entry (Start, cond, If), true (IfTrue, val, Return),
+    // false (IfFalse, val, Return).
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto cond = b.const_int(1);
+    auto if_node = b.if_node(cond);
+    g.set_ctrl_input(if_node, start);
+    auto iftrue = g.create(NodeKind::IfTrue);
+    g.set_ctrl_input(iftrue, if_node);
+    auto true_val = b.const_int(10);
+    auto ret1 = b.return_node(true_val);
+    g.set_ctrl_input(ret1, iftrue);
+    g.set_effect_input(ret1, start);
+    auto iffalse = g.create(NodeKind::IfFalse);
+    g.set_ctrl_input(iffalse, if_node);
+    auto false_val = b.const_int(20);
+    auto ret2 = b.return_node(false_val);
+    g.set_ctrl_input(ret2, iffalse);
+    g.set_effect_input(ret2, start);
+
+    auto bs = build_block_structure(g);
+    auto rpo = bs.reverse_post_order();
+    // All 3 reachable blocks should appear in RPO.
+    // (Some dead/floating blocks may exist but they shouldn't be visited
+    // because no control edge enters them.)
+    EXPECT_GE(rpo.size(), 3u);
+    // Entry block (0) must be first.
+    EXPECT_EQ(rpo.front(), 0u);
+    // No duplicates.
+    std::set<uint32_t> seen(rpo.begin(), rpo.end());
+    EXPECT_EQ(seen.size(), rpo.size());
+}
+
+TEST(BuildRegionsTest, NodeIdsInBlockReturnsContiguousRange) {
+    // Linear graph: 5 nodes, all in block 0.
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(1);
+    auto c = b.const_int(2);
+    auto add = b.add(a, c);
+    auto ret = b.return_node(add);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    auto bs = build_block_structure(g);
+    auto ids = bs.node_ids_in_block(g, 0);
+    // Should include all 5 live nodes (in NodeId order).
+    EXPECT_EQ(ids.size(), 5u);
+    EXPECT_EQ(ids[0], start.value);
+    EXPECT_EQ(ids[1], a.value);
+    EXPECT_EQ(ids[2], c.value);
+    EXPECT_EQ(ids[3], add.value);
+    EXPECT_EQ(ids[4], ret.value);
+}
+
+TEST(BuildRegionsTest, NodeIdsInBlockSkipsDeadNodes) {
+    // Build a graph with a dead node, ensure it's skipped.
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(1);
+    auto ret = b.return_node(a);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+    auto dead = b.const_int(99);
+    g.mark_dead(dead);
+
+    auto bs = build_block_structure(g);
+    auto ids = bs.node_ids_in_block(g, 0);
+    // Should not contain the dead node.
+    EXPECT_EQ(std::find(ids.begin(), ids.end(), dead.value), ids.end());
 }
