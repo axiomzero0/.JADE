@@ -33,8 +33,8 @@ public:
     }
     JvmEncoder& emit_u2(uint8_t op, uint16_t v) {
         bytes_.push_back(op);
-        bytes_.push_back(static_cast<uint8_t>(v & 0xFF));
         bytes_.push_back(static_cast<uint8_t>(v >> 8));
+        bytes_.push_back(static_cast<uint8_t>(v & 0xFF));
         return *this;
     }
     JvmEncoder& emit_s1(uint8_t op, int8_t v)  { return emit_u1(op, static_cast<uint8_t>(v)); }

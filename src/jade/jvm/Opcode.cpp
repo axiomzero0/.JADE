@@ -336,16 +336,19 @@ DecodedInstruction decode_opcode(const uint8_t* bytes, std::size_t len) {
         // - For wide iinc: u2 + u2 (local index + const)
         if (d.op == JvmOpcode::WideIinc) {
             if (len < d.length + 4) { d.op = JvmOpcode::Invalid; return d; }
-            uint16_t idx, const_val;
-            std::memcpy(&idx, bytes + d.length, 2);
-            std::memcpy(&const_val, bytes + d.length + 2, 2);
+            // Big-endian u2 + u2.
+            uint16_t idx = (static_cast<uint16_t>(bytes[d.length]) << 8)
+                         | bytes[d.length + 1];
+            uint16_t const_raw = (static_cast<uint16_t>(bytes[d.length + 2]) << 8)
+                               | bytes[d.length + 3];
             d.operand_u32 = idx;
-            d.operand_i32 = static_cast<int16_t>(const_val);   // sign-extended
+            d.operand_i32 = static_cast<int16_t>(const_raw);   // sign-extended
             d.length += 4;
         } else {
             if (len < d.length + 2) { d.op = JvmOpcode::Invalid; return d; }
-            uint16_t idx;
-            std::memcpy(&idx, bytes + d.length, 2);
+            // Big-endian u2.
+            uint16_t idx = (static_cast<uint16_t>(bytes[d.length]) << 8)
+                         | bytes[d.length + 1];
             d.operand_u32 = idx;
             d.length += 2;
         }
@@ -383,8 +386,9 @@ DecodedInstruction decode_opcode(const uint8_t* bytes, std::size_t len) {
         case OperandFormat::U2:
             if (len < d.length + 2) { d.op = JvmOpcode::Invalid; return d; }
             {
-                uint16_t v;
-                std::memcpy(&v, bytes + d.length, 2);
+                // JVM bytecode is big-endian (JVMS §4.10.1).
+                uint16_t v = (static_cast<uint16_t>(bytes[d.length]) << 8)
+                            | bytes[d.length + 1];
                 d.operand_u32 = v;
                 d.operand_i32 = static_cast<int32_t>(v);
             }
@@ -393,8 +397,10 @@ DecodedInstruction decode_opcode(const uint8_t* bytes, std::size_t len) {
         case OperandFormat::S2:
             if (len < d.length + 2) { d.op = JvmOpcode::Invalid; return d; }
             {
-                int16_t v;
-                std::memcpy(&v, bytes + d.length, 2);
+                // JVM bytecode is big-endian (JVMS §4.10.1).
+                uint16_t raw = (static_cast<uint16_t>(bytes[d.length]) << 8)
+                              | bytes[d.length + 1];
+                int16_t v = static_cast<int16_t>(raw);   // sign-extend
                 d.operand_i32 = v;
                 d.operand_u32 = static_cast<uint16_t>(v);
             }
@@ -403,10 +409,14 @@ DecodedInstruction decode_opcode(const uint8_t* bytes, std::size_t len) {
         case OperandFormat::S4:
             if (len < d.length + 4) { d.op = JvmOpcode::Invalid; return d; }
             {
-                int32_t v;
-                std::memcpy(&v, bytes + d.length, 4);
+                // JVM bytecode is big-endian (JVMS §4.10.1).
+                uint32_t raw = (static_cast<uint32_t>(bytes[d.length]) << 24)
+                             | (static_cast<uint32_t>(bytes[d.length + 1]) << 16)
+                             | (static_cast<uint32_t>(bytes[d.length + 2]) << 8)
+                             | bytes[d.length + 3];
+                int32_t v = static_cast<int32_t>(raw);   // sign-extend
                 d.operand_i32 = v;
-                d.operand_u32 = static_cast<uint32_t>(v);
+                d.operand_u32 = raw;
             }
             d.length += 4;
             break;
@@ -423,8 +433,9 @@ DecodedInstruction decode_opcode(const uint8_t* bytes, std::size_t len) {
         case OperandFormat::U2U1U1: {
             // invokeinterface: u2 index + u1 count + u1 zero
             if (len < d.length + 4) { d.op = JvmOpcode::Invalid; return d; }
-            uint16_t idx;
-            std::memcpy(&idx, bytes + d.length, 2);
+            // Big-endian u2.
+            uint16_t idx = (static_cast<uint16_t>(bytes[d.length]) << 8)
+                         | bytes[d.length + 1];
             d.operand_u32 = idx;
             d.length += 4;
             break;
@@ -432,8 +443,9 @@ DecodedInstruction decode_opcode(const uint8_t* bytes, std::size_t len) {
         case OperandFormat::U2U2: {
             // invokedynamic: u2 index + u2 zero
             if (len < d.length + 4) { d.op = JvmOpcode::Invalid; return d; }
-            uint16_t idx;
-            std::memcpy(&idx, bytes + d.length, 2);
+            // Big-endian u2.
+            uint16_t idx = (static_cast<uint16_t>(bytes[d.length]) << 8)
+                         | bytes[d.length + 1];
             d.operand_u32 = idx;
             d.length += 4;
             break;
@@ -441,8 +453,9 @@ DecodedInstruction decode_opcode(const uint8_t* bytes, std::size_t len) {
         case OperandFormat::U2U1: {
             // multianewarray: u2 index + u1 dim
             if (len < d.length + 3) { d.op = JvmOpcode::Invalid; return d; }
-            uint16_t idx;
-            std::memcpy(&idx, bytes + d.length, 2);
+            // Big-endian u2.
+            uint16_t idx = (static_cast<uint16_t>(bytes[d.length]) << 8)
+                         | bytes[d.length + 1];
             d.operand_u32 = idx;
             d.switch_count = bytes[d.length + 2];   // reuse switch_count for dim count
             d.length += 3;

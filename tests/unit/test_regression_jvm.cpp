@@ -30,7 +30,7 @@ public:
     JvmEnc& emit_u1(uint8_t op, uint8_t v) { bytes_.push_back(op); bytes_.push_back(v); return *this; }
     JvmEnc& emit_s1(uint8_t op, int8_t v) { bytes_.push_back(op); bytes_.push_back(static_cast<uint8_t>(v)); return *this; }
     JvmEnc& emit_u2(uint8_t op, uint16_t v) {
-        bytes_.push_back(op); bytes_.push_back(v & 0xFF); bytes_.push_back(v >> 8);
+        bytes_.push_back(op); bytes_.push_back(v >> 8); bytes_.push_back(v & 0xFF);
         return *this;
     }
     JvmEnc& emit_s2(uint8_t op, int16_t v) { return emit_u2(op, static_cast<uint16_t>(v)); }

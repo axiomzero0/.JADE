@@ -27,18 +27,20 @@ public:
     }
     JvmEncoder& emit_u2(uint8_t op, uint16_t v) {
         bytes_.push_back(op);
-        bytes_.push_back(static_cast<uint8_t>(v & 0xFF));
         bytes_.push_back(static_cast<uint8_t>(v >> 8));
+        bytes_.push_back(static_cast<uint8_t>(v & 0xFF));
         return *this;
     }
     JvmEncoder& emit_s2(uint8_t op, int16_t v) {
         return emit_u2(op, static_cast<uint16_t>(v));
     }
     JvmEncoder& emit_s4(uint8_t op, int32_t v) {
+        // JVM bytecode is big-endian (JVMS §4.10.1).
         bytes_.push_back(op);
-        for (int i = 0; i < 4; ++i) {
-            bytes_.push_back(static_cast<uint8_t>((v >> (i * 8)) & 0xFF));
-        }
+        bytes_.push_back(static_cast<uint8_t>((v >> 24) & 0xFF));
+        bytes_.push_back(static_cast<uint8_t>((v >> 16) & 0xFF));
+        bytes_.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
+        bytes_.push_back(static_cast<uint8_t>(v & 0xFF));
         return *this;
     }
     JvmEncoder& emit_u1u1(uint8_t op, uint8_t a, uint8_t b) {
@@ -203,22 +205,18 @@ TEST(JvmOpcodeTest, MonitorenterHasNoOperand) {
 }
 
 TEST(JvmOpcodeTest, WideIloadDecodesWithU2LocalIndex) {
-    // wide + iload + u2 index
-    auto bytes = JvmEncoder().emit1(0xC4).emit_u1(0x15, 0).emit_raw(0x00).emit_raw(0x05).build();
-    // Wait — wide + iload means: 0xC4 0x15 0x00 0x05 (4 bytes total)
-    // The encoder above emits 0xC4, then 0x15 + 0 (u1u1: 2 bytes), then 0x00, 0x05
-    // That's wrong. Let me build it manually:
-    std::vector<uint8_t> raw = {0xC4, 0x15, 0x05, 0x00};
+    // wide + iload + u2 index (big-endian: 0x00 0x05 = local 5)
+    std::vector<uint8_t> raw = {0xC4, 0x15, 0x00, 0x05};
     auto d = decode_opcode(raw.data(), raw.size());
     EXPECT_EQ(d.op, JvmOpcode::WideIload);
     EXPECT_EQ(d.length, 4);
     EXPECT_EQ(d.operand_u32, 5u);
-    (void)bytes;
 }
 
 TEST(JvmOpcodeTest, WideIincDecodesWithU2LocalAndS2Const) {
-    // wide + iinc + u2 local + u2 const (sign-extended)
-    std::vector<uint8_t> raw = {0xC4, 0x84, 0x05, 0x00, 0xFF, 0xFF};  // local=5, const=-1
+    // wide + iinc + u2 local + u2 const (big-endian)
+    // local = 0x00 0x05 = 5, const = 0xFF 0xFF = -1
+    std::vector<uint8_t> raw = {0xC4, 0x84, 0x00, 0x05, 0xFF, 0xFF};
     auto d = decode_opcode(raw.data(), raw.size());
     EXPECT_EQ(d.op, JvmOpcode::WideIinc);
     EXPECT_EQ(d.length, 6);

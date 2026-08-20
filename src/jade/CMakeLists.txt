@@ -50,6 +50,7 @@ add_library(jade_core STATIC
 
     cil/Opcode.cpp
     jvm/Opcode.cpp
+    jvm/ClassFile.cpp
 
     tier3_diamond/PEA.cpp
     tier3_diamond/SRA.cpp

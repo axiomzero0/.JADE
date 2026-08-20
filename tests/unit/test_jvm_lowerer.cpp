@@ -32,8 +32,8 @@ public:
     }
     JvmEncoder& emit_u2(uint8_t op, uint16_t v) {
         bytes_.push_back(op);
-        bytes_.push_back(static_cast<uint8_t>(v & 0xFF));
         bytes_.push_back(static_cast<uint8_t>(v >> 8));
+        bytes_.push_back(static_cast<uint8_t>(v & 0xFF));
         return *this;
     }
     JvmEncoder& emit_s2(uint8_t op, int16_t v) {
@@ -341,9 +341,9 @@ TEST(JvmLowererTest, DupDuplicatesTopOfStack) {
 }
 
 TEST(JvmLowererTest, WideIloadDecodesAndLowersCorrectly) {
-    // wide + iload + u2 5 = 0xC4 0x15 0x05 0x00
+    // wide + iload + u2 5 = 0xC4 0x15 0x00 0x05 (big-endian)
     // Then ireturn.
-    std::vector<uint8_t> raw = {0xC4, 0x15, 0x05, 0x00, 0xAC};
+    std::vector<uint8_t> raw = {0xC4, 0x15, 0x00, 0x05, 0xAC};
     JvmLowerer lowerer;
     auto r = lowerer.lower(raw, 6, 0);
     ASSERT_TRUE(r.has_value()) << r.error().what();
