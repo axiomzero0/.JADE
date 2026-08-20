@@ -213,7 +213,8 @@ The interpreter's giant `switch` defeats branch prediction. GCC's "labels as val
 | P3 | `LiveRangeSplitting` + `Rematerialization` in LSRA | Fewer spills | ❌ Not started |
 | P3 | `TierManager` + compilation queue | Actual tiered compilation | ❌ Not started |
 | P4 | `Devirtualization` (CHA + profile) + `ICStubEmission` | Virtual calls | ❌ Not started |
-| P4 | `PEA` (full) + `SRA` (with Phi-per-field) | Eliminate allocations | 🟡 Partial — straight-line only |
+| P4 | `PEA` (full) + `SRA` (with Phi-per-field) | Eliminate allocations | ✅ Phase 0+1 done — true Materialize insertion, Box→Unbox round-trip, effect chain short-circuit, 10 golden tests, 4 Java PEA tests |
 | P5 | `SLP` (with SIMD emission) + `LoopVectorization` | SIMD | 🟡 Analysis-only |
 | P5 | OSR + code cache (W^X) + LTO defaults | Long-running loops, deployment | 🟡 LTO enabled by default; OSR + W^X not started |
 | P0+ | **Phi resolution at runtime** | Real loop iteration | ✅ Done — memory-based locals (StLoc/LdLoc) handle loop-carried values without explicit Phi. 3 loop tests pass. |
+| P1+ | **JVM opcode correctness** | Correct Java lowering | ✅ Done — fixed getfield/putfield/getstatic/putstatic misalignment (was swapped); 5 regression tests |
