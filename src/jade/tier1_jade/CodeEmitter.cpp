@@ -694,21 +694,25 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
 
             case NodeKind::Jump: {
                 // Unconditional jump — the back-edge of a loop.
-                // Find the Loop header block and emit `jmp loop_header_label`.
-                Label target = a.new_label();
-                bool found = false;
-                for (auto& bb : block_struct.blocks) {
-                    if (bb.leader.valid() && graph.node(bb.leader).kind == NodeKind::Loop) {
-                        auto it = impl_->block_labels.find(bb.leader.value);
-                        if (it != impl_->block_labels.end()) {
-                            target = it->second;
-                            found = true;
-                            break;
-                        }
+                // Find the nearest ENCLOSING Loop header (the innermost Loop
+                // node that appears BEFORE this Jump in NodeId order) and emit
+                // `jmp loop_header_label`. For nested loops, this ensures the
+                // inner Jump targets the inner Loop, not the outer one.
+                NodeId best_loop = NodeId::invalid();
+                for (std::size_t j = 0; j < graph.size(); ++j) {
+                    const NodeId other{static_cast<uint32_t>(j + 1)};
+                    if (other >= id) break;   // only consider nodes BEFORE this Jump
+                    const Node& on = graph.node(other);
+                    if (on.is_dead()) continue;
+                    if (on.kind == NodeKind::Loop) {
+                        best_loop = other;   // keep the last (highest NodeId) Loop before Jump
                     }
                 }
-                if (found) {
-                    a.jmp(target);
+                if (best_loop.valid()) {
+                    auto it = impl_->block_labels.find(best_loop.value);
+                    if (it != impl_->block_labels.end()) {
+                        a.jmp(it->second);
+                    }
                 }
                 break;
             }

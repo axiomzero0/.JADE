@@ -120,19 +120,24 @@ void BuildRegionsPass::connect_edges(const Graph& graph, BlockStructure& bs) {
                 break;
             }
             case NodeKind::Jump: {
-                // Back-edge: the Jump targets the nearest Loop header
-                // (a node with kind Loop that appears earlier in the graph).
-                // Find the Loop header block.
+                // Back-edge: the Jump targets the nearest ENCLOSING Loop header
+                // (the innermost Loop node that appears BEFORE this Jump in
+                // NodeId order). For nested loops, this ensures the inner
+                // Jump targets the inner Loop, not the outer one.
+                NodeId best_loop = NodeId::invalid();
                 for (std::size_t j = 0; j < graph.size(); ++j) {
                     const NodeId other{static_cast<uint32_t>(j + 1)};
+                    if (other >= bb.last) break;   // only consider nodes BEFORE this Jump
                     const Node& on = graph.node(other);
                     if (on.is_dead()) continue;
                     if (on.kind == NodeKind::Loop) {
-                        uint32_t target_block = bs.block_of(other);
-                        if (target_block < bs.blocks.size()) {
-                            bb.successors.push_back(target_block);
-                        }
-                        break;   // first Loop header found
+                        best_loop = other;   // keep the last (highest NodeId) Loop before Jump
+                    }
+                }
+                if (best_loop.valid()) {
+                    uint32_t target_block = bs.block_of(best_loop);
+                    if (target_block < bs.blocks.size()) {
+                        bb.successors.push_back(target_block);
                     }
                 }
                 break;

@@ -27,6 +27,7 @@ add_executable(jade_unit_tests
     unit/test_build_regions.cpp
     unit/test_granit_cil_interpreter.cpp
     unit/test_granit_jvm_interpreter.cpp
+    unit/test_regression.cpp
 )
 
 jade_target_apply_tooling_flags(jade_unit_tests)
