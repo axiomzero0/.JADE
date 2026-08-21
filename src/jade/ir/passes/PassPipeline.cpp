@@ -56,12 +56,22 @@ std::unique_ptr<PassPipeline> build_ruby_pipeline() {
 
 std::unique_ptr<PassPipeline> build_diamond_pipeline() {
     auto pipe = build_ruby_pipeline();
+    // DIAMOND tier: each pass that modifies the graph is followed by DCE
+    // to clean up dead nodes, enabling further optimizations in the next pass.
     pipe->add(std::make_unique<tier3::PEAPass>());
+    pipe->add(std::make_unique<DeadCodeEliminationPass>());
     pipe->add(std::make_unique<tier3::SRAPass>());
+    pipe->add(std::make_unique<DeadCodeEliminationPass>());
     pipe->add(std::make_unique<tier3::LoopUnrollingPass>());
+    pipe->add(std::make_unique<DeadCodeEliminationPass>());
     pipe->add(std::make_unique<tier3::LoopUnswitchingPass>());
+    pipe->add(std::make_unique<DeadCodeEliminationPass>());
     pipe->add(std::make_unique<tier3::DevirtualizationPass>());
+    pipe->add(std::make_unique<DeadCodeEliminationPass>());
     pipe->add(std::make_unique<tier3::SLPPass>());
+    pipe->add(std::make_unique<DeadCodeEliminationPass>());
+    // Final GCM + DCE to clean up everything.
+    pipe->add(std::make_unique<GCMPass>());
     pipe->add(std::make_unique<DeadCodeEliminationPass>());
     return pipe;
 }

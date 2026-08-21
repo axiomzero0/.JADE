@@ -12,6 +12,7 @@
 #include "jade/ir/Graph.hpp"
 #include "jade/ir/Verifier.hpp"
 #include "jade/ir/passes/PassPipeline.hpp"
+#include "jade/runtime/TieredDispatch.hpp"
 
 #include <print>
 #include <format>
@@ -29,8 +30,8 @@ void print_version() {
     std::println("jadec (.JADE Compiler) version 0.1.0");
     std::println("  Tier 0 (granit)  : enabled");
     std::println("  Tier 1 (JADE)    : enabled (LinearScanRegAlloc + asmjit emitter)");
-    std::println("  Tier 2 (RUBY)    : enabled (passes: ConstantFolding, GVN, DCE)");
-    std::println("  Tier 3 (DIAMOND) : not yet enabled (falls back to RUBY)");
+    std::println("  Tier 2 (RUBY)    : enabled (19 optimization passes)");
+    std::println("  Tier 3 (DIAMOND) : enabled (PEA, SRA, SLP, LoopUnroll, Devirt, LoopUnswitch)");
 }
 
 void print_help(const char* prog) {
@@ -40,6 +41,8 @@ void print_help(const char* prog) {
     std::println("  -h, --help               Show this help and exit");
     std::println("  -V, --version            Show version and exit");
     std::println("  -O<level>                Optimization level (0=granit, 1=JADE, 2=RUBY, 3=DIAMOND)");
+    std::println("  --tiered                 Enable tier escalation (granit→JADE→RUBY→DIAMOND)");
+    std::println("  --invocations N          Number of invocations (for tier escalation testing)");
     std::println("  --dump-bytecode          Print the bytecode for the program");
     std::println("  --dump-ir                Print the SoN IR after optimization");
     std::println("  --no-run                 Compile only; do not execute");
@@ -59,6 +62,14 @@ void print_help(const char* prog) {
             opts.dump_ir = true;
         } else if (a == "--no-run") {
             opts.run_program = false;
+        } else if (a == "--tiered") {
+            opts.tiered = true;
+        } else if (a == "--invocations") {
+            if (i + 1 >= argc) {
+                return std::unexpected(make_error(ErrorKind::BadInput,
+                    "--invocations requires a count argument"));
+            }
+            opts.invocations = static_cast<uint32_t>(std::stoul(argv[++i]));
         } else if (a.starts_with("-O")) {
             // -O0..3
             if (a.size() == 3 && a[2] >= '0' && a[2] <= '3') {
@@ -245,17 +256,47 @@ Result<int> run_driver(int argc, char** argv) {
                 }
             }
 
-            // Execute via the granit JVM interpreter.
+            // Execute via the granit JVM interpreter, or TieredDispatch if --tiered.
             if (opts.run_program) {
-                granit::JvmInterpreter interp;
-                std::vector<granit::Value> args;  // no args for now
-                auto exec_r = interp.run(main->code, main->max_locals, 0, std::move(args));
-                if (!exec_r) {
-                    std::println(stderr, "jadec: execution failed: {}", exec_r.error().what());
-                    return 1;
+                if (opts.tiered) {
+                    // Use TieredDispatch for tier escalation.
+                    // Set low thresholds so escalation happens within the invocation count.
+                    TieredDispatch dispatch;
+                    TierThresholds t;
+                    t.interpreter_to_baseline = 3;
+                    t.baseline_to_optimizing = 6;
+                    t.optimizing_to_peak = 10;
+                    dispatch.set_thresholds(t);
+
+                    std::string method_key = std::format("{}.{}", cf.class_name, main->name);
+                    std::println("\n--- tiered execution ({} invocations) ---", opts.invocations);
+
+                    granit::Value last_result = granit::Value::from_int32(0);
+                    for (uint32_t inv = 0; inv < opts.invocations; ++inv) {
+                        auto r = dispatch.invoke(method_key, main->code, main->max_locals, 0);
+                        if (!r) {
+                            std::println(stderr, "jadec: execution failed at invocation {}: {}",
+                                         inv, r.error().what());
+                            return 1;
+                        }
+                        last_result = *r;
+                    }
+
+                    std::println("return value: {}", granit::to_string(last_result));
+                    std::println("final tier: {}", static_cast<int>(dispatch.current_tier(method_key)));
+                    std::println("invocations: {}", dispatch.invocation_count(method_key));
+                } else {
+                    // Single invocation via the JVM interpreter.
+                    granit::JvmInterpreter interp;
+                    std::vector<granit::Value> args;
+                    auto exec_r = interp.run(main->code, main->max_locals, 0, std::move(args));
+                    if (!exec_r) {
+                        std::println(stderr, "jadec: execution failed: {}", exec_r.error().what());
+                        return 1;
+                    }
+                    std::println("\n--- execution result ---");
+                    std::println("return value: {}", granit::to_string(*exec_r));
                 }
-                std::println("\n--- execution result ---");
-                std::println("return value: {}", granit::to_string(*exec_r));
             }
 
             return 0;

@@ -20,6 +20,8 @@ struct DriverOptions {
     bool dump_bytecode{false};
     bool dump_ir{false};
     bool run_program{true};
+    bool tiered{false};           // --tiered: use TieredDispatch for tier escalation
+    uint32_t invocations{1};      // --invocations N: how many times to invoke (for tier testing)
     int  optimization_level{0};   // 0=granit only, 1=JADE, 2=RUBY, 3=DIAMOND
 };
 
