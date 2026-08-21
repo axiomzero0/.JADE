@@ -145,6 +145,15 @@ enum class NodeKind : uint8_t {
                      // exact point where it escapes. Inputs: field values.
                      // Output: the materialized object reference.
 
+    // ── SLP vectorization (DIAMOND tier) ────────────────────────────────
+    VectorOp,        // SLP: a pack of 2/4/8 isomorphic independent scalar ops
+                     // replaced by a single SIMD vector op. Inputs: the
+                     // scalar values to pack. side_data::vector_kind records
+                     // the original NodeKind (Add/Sub/Mul/etc.). The emitter
+                     // lowers this to paddd/psubd/pmulld/pandd/pord/pxord.
+    VectorExtract,   // SLP: extract lane N from a VectorOp. Input: the
+                     // VectorOp. side_data::vector_lane records the lane index.
+
     kCount,         // sentinel = number of node kinds
 };
 

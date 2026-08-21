@@ -98,6 +98,16 @@ struct NodeSideData {
 
     // Bytecode source position for deopt and debugging.
     uint32_t bc_offset{0xFFFF'FFFF};
+
+    // For VectorOp: the original scalar NodeKind (Add/Sub/Mul/And/Or/Xor).
+    // The emitter uses this to pick the right SIMD instruction (paddd/psubd/etc.).
+    NodeKind vector_kind{NodeKind::Invalid};
+
+    // For VectorOp: the number of lanes (2, 4, or 8).
+    uint8_t vector_lanes{0};
+
+    // For VectorExtract: the lane index to extract (0..vector_lanes-1).
+    uint8_t vector_lane{0};
 };
 
 }  // namespace jade

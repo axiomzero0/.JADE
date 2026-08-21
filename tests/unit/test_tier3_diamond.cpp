@@ -156,26 +156,44 @@ TEST(SLPTest, IsAnalysisPass) {
     EXPECT_TRUE(pass.is_analysis());
 }
 
-TEST(SLPTest, RunsOnArithmeticGraph) {
+TEST(SLPTest, PacksIndependentAddsIntoVectorOp) {
+    // Two independent Add nodes with no data dependency between them.
+    // SLP should pack them into a single VectorOp + 2 VectorExtract nodes.
     Graph g;
     GraphBuilder b(g);
     auto start = b.start();
     auto a = b.const_int(1);
     auto c = b.const_int(2);
-    auto add1 = b.add(a, c);
+    auto add1 = b.add(a, c);       // add1 = 1 + 2 = 3
     auto d = b.const_int(3);
     auto e = b.const_int(4);
-    auto add2 = b.add(d, e);
+    auto add2 = b.add(d, e);       // add2 = 3 + 4 = 7 (independent of add1)
     auto ret = b.return_node(add1);
     g.set_ctrl_input(ret, start);
     g.set_effect_input(ret, start);
     (void)add2;
+
     SLPPass pass;
     PassContext ctx;
     auto r = pass.run(g, ctx);
     ASSERT_TRUE(r.has_value()) << r.error().what();
-    // SLP is analysis-only; it should not modify the graph.
-    EXPECT_FALSE(g.node(add1).is_dead());
+
+    // SLP is real: it should have packed add1 and add2 into a VectorOp.
+    // The original add1 should be dead (replaced by a VectorExtract).
+    EXPECT_TRUE(g.node(add1).is_dead())
+        << "add1 should be packed into a VectorOp (now dead)";
+
+    // A VectorOp and 2 VectorExtract nodes should exist.
+    int vec_op_count = 0;
+    int vec_extract_count = 0;
+    for (std::size_t i = 0; i < g.size(); ++i) {
+        const NodeId id{static_cast<uint32_t>(i + 1)};
+        if (g.node(id).is_dead()) continue;
+        if (g.node(id).kind == NodeKind::VectorOp) ++vec_op_count;
+        if (g.node(id).kind == NodeKind::VectorExtract) ++vec_extract_count;
+    }
+    EXPECT_GE(vec_op_count, 1) << "SLP should create a VectorOp node";
+    EXPECT_GE(vec_extract_count, 2) << "SLP should create 2 VectorExtract nodes";
 }
 
 TEST(SLPTest, DoesNotCrashOnEmptyGraph) {
@@ -184,6 +202,40 @@ TEST(SLPTest, DoesNotCrashOnEmptyGraph) {
     PassContext ctx;
     auto r = pass.run(g, ctx);
     ASSERT_TRUE(r.has_value());
+}
+
+TEST(SLPTest, DoesNotPackDependentNodes) {
+    // Two Add nodes where add2 depends on add1 — they are NOT independent,
+    // so SLP should NOT pack them.
+    Graph g;
+    GraphBuilder b(g);
+    auto start = b.start();
+    auto a = b.const_int(1);
+    auto c = b.const_int(2);
+    auto add1 = b.add(a, c);       // add1 = 1 + 2 = 3
+    auto e = b.const_int(4);
+    auto add2 = b.add(add1, e);    // add2 = add1 + 4 (DEPENDENT on add1)
+    auto ret = b.return_node(add2);
+    g.set_ctrl_input(ret, start);
+    g.set_effect_input(ret, start);
+
+    SLPPass pass;
+    PassContext ctx;
+    auto r = pass.run(g, ctx);
+    ASSERT_TRUE(r.has_value()) << r.error().what();
+
+    // add1 and add2 are dependent (add2 uses add1) — SLP should NOT pack them.
+    int vec_op_count = 0;
+    for (std::size_t i = 0; i < g.size(); ++i) {
+        const NodeId id{static_cast<uint32_t>(i + 1)};
+        if (!g.node(id).is_dead() && g.node(id).kind == NodeKind::VectorOp) {
+            ++vec_op_count;
+        }
+    }
+    EXPECT_EQ(vec_op_count, 0)
+        << "SLP should NOT pack dependent nodes";
+    EXPECT_FALSE(g.node(add1).is_dead());
+    EXPECT_FALSE(g.node(add2).is_dead());
 }
 
 // ── DIAMOND pipeline ──────────────────────────────────────────────────────────

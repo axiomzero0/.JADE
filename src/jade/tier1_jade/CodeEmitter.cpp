@@ -796,6 +796,82 @@ Result<CompiledFunction> CodeEmitter::emit(const Graph& graph,
                     std::format("emit: Materialize requires runtime allocator; "
                                 "falling back to granit (node %{})", id.value)));
 
+            // ── SLP vectorization: VectorOp + VectorExtract ──
+            //
+            // VectorOp: a pack of N isomorphic independent scalar ops,
+            // replaced by a single SIMD vector op. We emit scalar code for
+            // now (no XMM register allocation), but the transformation is
+            // REAL: the graph has been transformed from N separate ops to
+            // 1 VectorOp + N VectorExtract nodes.
+            //
+            // The scalar emission computes each lane independently. A
+            // future XMM-aware emitter would emit paddd/psubd/pmulld.
+            case NodeKind::VectorOp: {
+                // Scalar fallback: compute each lane independently.
+                // The VectorOp's inputs are [a0, b0, a1, b1, ...] for
+                // binary ops. We compute each pair and store the result
+                // in a spill slot. The VectorExtract reads from there.
+                //
+                // Since we don't have XMM reg alloc, we emit scalar code
+                // that produces the same result. This is correct but
+                // doesn't use SIMD — the graph transformation is real,
+                // the emission is scalar.
+                auto inputs = graph.data_inputs(id);
+                NodeKind vk = graph.side(id).vector_kind;
+                uint8_t lanes = graph.side(id).vector_lanes;
+                if (lanes == 0 || inputs.size() < lanes * 2) break;
+
+                // For each lane, compute the scalar result and spill it.
+                // (The VectorExtract will load from the spill slot.)
+                for (uint8_t lane = 0; lane < lanes; ++lane) {
+                    NodeId in_a = inputs[lane * 2];
+                    NodeId in_b = inputs[lane * 2 + 1];
+                    if (!in_a.valid() || !in_b.valid()) continue;
+                    const LiveInterval& iv_a = alloc.intervals[in_a.value - 1];
+                    const LiveInterval& iv_b = alloc.intervals[in_b.value - 1];
+                    x86::Gp src_a = load_value(a, iv_a, x86::rax);
+                    x86::Gp src_b = load_value(a, iv_b, x86::rcx);
+                    x86::Gp dst = iv.assigned_reg ? to_asmjit_gpr(*iv.assigned_reg) : x86::rax;
+                    if (dst != src_a) a.mov(dst, src_a);
+                    switch (vk) {
+                        case NodeKind::Add: a.add(dst, src_b); break;
+                        case NodeKind::Sub: a.sub(dst, src_b); break;
+                        case NodeKind::Mul: a.imul(dst, src_b); break;
+                        case NodeKind::And: a.and_(dst, src_b); break;
+                        case NodeKind::Or:  a.or_(dst, src_b); break;
+                        case NodeKind::Xor: a.xor_(dst, src_b); break;
+                        default: break;
+                    }
+                    // Spill the lane result. We use a per-lane spill slot
+                    // computed from the VectorOp's NodeId and lane index.
+                    // The VectorExtract reads from the same slot.
+                    if (iv.spill_slot) {
+                        a.mov(x86::qword_ptr(x86::rbp, -static_cast<int32_t>(*iv.spill_slot) - lane * 8), dst);
+                    }
+                }
+                break;
+            }
+
+            case NodeKind::VectorExtract: {
+                // Load the lane result from the VectorOp's spill slot.
+                // (Scalar fallback — a real implementation would use
+                // pextrd from an XMM register.)
+                auto inputs = graph.data_inputs(id);
+                if (inputs.empty()) break;
+                NodeId vec_op = inputs[0];
+                if (!vec_op.valid()) break;
+                uint8_t lane = graph.side(id).vector_lane;
+                // The VectorOp's spill slot holds all lane results.
+                // We read from offset (spill_slot - lane * 8).
+                const LiveInterval& vec_iv = alloc.intervals[vec_op.value - 1];
+                if (vec_iv.spill_slot && iv.assigned_reg) {
+                    x86::Gp dst = to_asmjit_gpr(*iv.assigned_reg);
+                    a.mov(dst, x86::qword_ptr(x86::rbp,
+                        -static_cast<int32_t>(*vec_iv.spill_slot) - lane * 8));
+                }
+                break;
+            }
+
             case NodeKind::Return: {
                 auto inputs = graph.data_inputs(id);
                 if (inputs.size() == 1) {

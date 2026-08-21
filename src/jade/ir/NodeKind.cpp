@@ -168,6 +168,10 @@ constexpr NodeKindInfo kTable[] = {
 
     // ── PEA materialization ──
     {"Materialize",  false, true,  false, false, false, false, 0xFF}, // field values...
+
+    // ── SLP vectorization ──
+    {"VectorOp",      true,  false, false, false, false, false, 0xFF}, // 2/4/8 scalar inputs
+    {"VectorExtract", true,  false, false, false, false, false, 1},    // 1 vector input
 };
 
 static_assert(std::size(kTable) == static_cast<std::size_t>(NodeKind::kCount),
